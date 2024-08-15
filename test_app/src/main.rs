@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use gui::{render::Color, styles::Size, texture::Texture, Element, Gui};
+use rugui::{render::Color, styles::{Position, Positions, Size}, texture::Texture, Children, Element, Gui};
 use winit::{application::ApplicationHandler, window};
 
 fn main() {
@@ -41,24 +41,55 @@ impl ApplicationHandler for App {
                 .unwrap(),
         );
         let drawing = pollster::block_on(Drawing::new(window.clone()));
-        let mut gui: Gui<Message> = Gui::new((800, 600), drawing.device.clone(), drawing.queue.clone());
+        let mut gui: Gui<Message> =
+            Gui::new((800, 600), drawing.device.clone(), drawing.queue.clone());
 
-        let texture = gui.texture_from_bytes(include_bytes!("they.webp"), "sdf");
+        let texture = Arc::new(gui.texture_from_bytes(include_bytes!("they.webp"), "sdf"));
 
-        let mut elem = Element::new(&gui).with_label("Hello".to_string());
-        let styles = &mut elem.styles;
-        styles.background.color = Color {
+        let mut rows = Element::new(&gui).with_label("Hello".to_string());
+        let styles = &mut rows.styles;
+        styles.min_width = Size::Pixel(500.0);
+        styles.max_width = Size::Pixel(1600.0);
+
+        let mut row1 = Element::new(&gui).with_label("Row 1".to_string());
+        let mut row2 = Element::new(&gui).with_label("Row 2".to_string());
+        let mut row3 = Element::new(&gui).with_label("Row 3".to_string());
+
+        let row1_styles = &mut row1.styles;
+        row1_styles.background.texture = Some(texture.clone());
+        row1_styles.position = Positions::Align(Position::Left);
+        row1_styles.width = Size::Pixel(200.0);
+        //row1_styles.margin = Size::Pixel(10.0);
+
+        let row2_styles = &mut row2.styles;
+        row2_styles.background.color = Color {
             r: 0.0,
-            g: 0.0,
-            b: 0.6,
+            g: 0.6,
+            b: 0.0,
             a: 0.5,
         };
-        styles.min_width = Size::Pixel(500.0);
-        styles.max_width = Size::Pixel(1200.0);
-        styles.background.texture = Some(Arc::new(texture));
-        let entry = gui.add_element(elem);
-        gui.set_entry(Some(entry));
 
+        let row3_styles = &mut row3.styles;
+        row3_styles.background.color = Color {
+            r: 0.6,
+            g: 0.0,
+            b: 0.0,
+            a: 0.5,
+        };
+        row3_styles.min_height = Size::Pixel(200.0);
+        row3_styles.background.texture = Some(texture.clone());
+        row3_styles.position = Positions::Center(Position::TopRight);
+
+        rows.children = Children::Rows {
+            children: vec![
+                gui.add_element(row1),
+                gui.add_element(row2),
+                gui.add_element(row3),
+            ],
+            spacing: Size::Fill,
+        };
+        let entry = gui.add_element(rows);
+        gui.set_entry(Some(entry));
 
         window.set_visible(true);
         let this = Application {

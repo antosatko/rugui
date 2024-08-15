@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use events::{EventResponse, EventTypes};
 use nalgebra::Point2;
-use render::{GpuBound, GpuProxy, RenderElement};
+use render::{GpuBound, RenderElement};
 use styles::{Size, StyleSheet};
 
 pub mod events;
@@ -67,7 +67,14 @@ where
             self.remove_node(entry);
         }
         self.entry = key;
-        self.transform_entry(self.size);
+        if let Some(key) = key {
+            let transform = NodeTransform {
+                position: Point2::new(self.size.0 as f32 / 2.0, self.size.1 as f32 / 2.0),
+                scale: Point2::new(self.size.0 as f32, self.size.1 as f32),
+                rotation: 0.0,
+            };
+            self.transform_element(key, &transform);
+        }
     }
 
     pub fn event(&mut self, event: events::Event) -> EventResponse<Msg> {
@@ -90,30 +97,23 @@ where
         } else {
             return;
         };
-        self.transform_entry(size);
-    }
-
-    fn transform_entry(&mut self, size: (u32, u32)) {
-        let entry_key = match &self.entry {
-            Some(entry) => entry,
-            None => return,
-        };
-        self.transform_element(*entry_key, NodeTransform {
+        self.transform_element(*entry_key, &NodeTransform {
             position: Point2::new(size.0 as f32 / 2.0, size.1 as f32 / 2.0),
             scale: Point2::new(size.0 as f32, size.1 as f32),
             rotation: 0.0,
         });
     }
 
-    fn transform_element(&mut self, key: ElementKey, transform: NodeTransform) {
+    fn transform_element(&mut self, key: ElementKey, transform: &NodeTransform) {
         let node = match self.nodes.get_mut(&key) {
             Some(node) => node,
             None => return,
         };
         let styles = &node.styles;
         let (width, height) = (styles.get_width(transform.scale.x), styles.get_height(transform.scale.y));
+        let (x, y) = (styles.get_x(transform.position.x, transform.scale.x, width), styles.get_y(transform.position.y, transform.scale.y, height));
         let transform = NodeTransform {
-            position: Point2::new(transform.position.x, transform.position.y),
+            position: Point2::new(x, y),
             scale: Point2::new(width, height),
             rotation: 0.0,
         };
@@ -128,12 +128,40 @@ where
         node.render_element.set_transform(&transform, &self.gpu.proxy);
         match node.children.to_owned() {
             Children::Element(child) => {
-                self.transform_element(child.clone(), transform);
+                self.transform_element(child.clone(), &transform);
                 return;
             }
-            Children::Layers(children) => todo!("Transform the children"),
-            Children::Rows { children, .. } => todo!("Transform the children"),
-            Children::Columns { children, .. } => todo!("Transform the children"),
+            Children::Layers(children) => {
+                for child in children {
+                    self.transform_element(child, &transform);
+                }
+            }
+            Children::Rows { children, .. } => {
+                if children.is_empty() {
+                    return;
+                }
+                let step = transform.scale.y / children.len() as f32;
+                let y = transform.position.y - transform.scale.y / 2.0 + step / 2.0;
+                for (idx, child) in children.iter().enumerate() {
+                    let mut child_transform = transform.clone();
+                    child_transform.scale.y = step;
+                    child_transform.position.y = y + step * idx as f32;
+                    self.transform_element(*child, &child_transform);
+                }
+            }
+            Children::Columns { children, .. } => {
+                if children.is_empty() {
+                    return;
+                }
+                let step = transform.scale.x / children.len() as f32;
+                let x = transform.position.x - transform.scale.x / 2.0 + step / 2.0;
+                for (idx, child) in children.iter().enumerate() {
+                    let mut child_transform = transform.clone();
+                    child_transform.scale.x = step;
+                    child_transform.position.x = x + step * idx as f32;
+                    self.transform_element(*child, &child_transform);
+                }
+            }
             Children::None => return,
         };
     }
@@ -148,12 +176,40 @@ where
             None => return,
         };
         pass.set_bind_group(0, &self.gpu.dimensions_bind_group, &[]);
-        let node = match self.nodes.get(entry_key) {
+        
+        self.render_element(*entry_key, pass);
+    }
+
+    fn render_element<'a>(&'a self, key: ElementKey, pass: &mut wgpu::RenderPass<'a>) {
+        let node = match self.nodes.get(&key) {
             Some(node) => node,
             None => return,
         };
-        
+        if !node.styles.visible {
+            return;
+        }
         node.render_element.render(&self.gpu.proxy.pipelines, pass);
+        match node.children.to_owned() {
+            Children::Element(child) => {
+                self.render_element(child, pass);
+            }
+            Children::Layers(children) => {
+                for child in children {
+                    self.render_element(child, pass);
+                }
+            }
+            Children::Rows { children, .. } => {
+                for child in children {
+                    self.render_element(child, pass);
+                }
+            }
+            Children::Columns { children, .. } => {
+                for child in children {
+                    self.render_element(child, pass);
+                }
+            }
+            Children::None => return,
+        }
     }
 
     pub fn texture_from_bytes(&self, bytes: &[u8], label: &str) -> texture::Texture {
@@ -162,11 +218,6 @@ where
 
     pub fn texture_from_image(&self, img: &image::DynamicImage, label: Option<&str>) -> texture::Texture {
         texture::Texture::from_image(&self.gpu.proxy, img, label)
-    }
-
-    pub fn tetxture_from_file(&self, path: &str) -> texture::Texture {
-        let image = image::open(path).unwrap();
-        self.texture_from_image(&image, None)
     }
 }
 
