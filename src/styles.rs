@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bytemuck::Zeroable;
 
-use crate::{render::Color, texture::Texture};
+use crate::{render::{Color, RadialGradient}, texture::Texture};
 
 pub struct StyleSheet {
     /// Rotation of the element
@@ -274,22 +274,13 @@ pub struct Background {
     /// Radial gradient of the element
     /// 
     /// Not implemented yet
-    pub rad_gradient: Option<RadGradient>,
+    pub rad_gradient: Option<Arc<RadialGradient>>,
 }
 
 /// Linear gradient of the element
 /// 
 /// Not implemented yet
 pub struct LinGradient {
-    pub p1: (Position, Color),
-    pub p2: (Position, Color),
-}
-
-
-/// Radial gradient of the element
-/// 
-/// Not implemented yet
-pub struct RadGradient {
     pub p1: (Position, Color),
     pub p2: (Position, Color),
 }

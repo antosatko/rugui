@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use events::{EventResponse, EventTypes};
 use nalgebra::Point2;
-use render::{GpuBound, RenderElement};
+use render::{Color, GpuBound, RadialGradient, RenderElement};
 use styles::{Size, StyleSheet};
 
 pub mod events;
@@ -128,6 +128,9 @@ where
                 node.render_element.set_texture(texture.clone());
             }
             _ => {}
+        }
+        if let Some(grad) = &styles.background.rad_gradient {
+            node.render_element.set_radial_gradient(grad.clone());
         }
         node.render_element.set_color(color, &self.gpu.proxy);
         node.render_element.set_transform(&transform, &self.gpu.proxy);
@@ -276,6 +279,15 @@ where
 
     pub fn texture_from_image(&self, img: &image::DynamicImage, label: Option<&str>) -> Arc<texture::Texture> {
         Arc::new(texture::Texture::from_image(&self.gpu.proxy, img, label))
+    }
+
+    pub fn radial_gradient(&self, center: [f32; 2], radius: f32, outer_color: Color, color: Color) -> RadialGradient {
+        let mut grad = RadialGradient::zeroed(&self.gpu.proxy);
+        grad.set_center(center, &self.gpu.proxy);
+        grad.set_radius(radius, &self.gpu.proxy);
+        grad.set_center_color(color, &self.gpu.proxy);
+        grad.set_outer_color(outer_color, &self.gpu.proxy);
+        grad
     }
 }
 

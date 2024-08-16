@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use rugui::{
-    render::Color,
+    render::{Color, RadialGradient},
     styles::{Position, Rotation, Size},
     texture::Texture,
     Children, Element, Gui, Spacing,
@@ -91,12 +91,29 @@ impl ApplicationHandler for App {
         column1_styles.margin = Size::Percent(-5.0);
 
         let column2_styles = &mut column2.styles;
-        column2_styles.background.color = Color {
-            r: 1.0,
-            g: 1.0,
-            b: 1.0,
-            a: 1.0,
-        };
+        // experimental radial gradient
+        // this is a subject to change
+        let grad = gui.radial_gradient(
+            // center, 
+            [0.5, 0.0],
+            // radius, 
+            0.5,
+            // outer_color,
+            Color {
+                r: 1.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            }, 
+            // color
+            Color {
+                r: 0.5,
+                g: 0.5,
+                b: 0.5,
+                a: 0.0,
+            }
+        );
+        column2_styles.background.rad_gradient = Some(Arc::new(grad));
         column2_styles.margin = Size::Percent(50.0);
 
         let column3_styles = &mut column3.styles;
