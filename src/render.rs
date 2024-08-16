@@ -804,7 +804,7 @@ impl RenderElementData {
         }
     }
 
-    pub fn from_transform(transform: &crate::NodeTransform) -> Self {
+    pub fn from_transform(transform: &crate::ElementTransform) -> Self {
         Self {
             center: [transform.position.x, transform.position.y],
             size: [transform.scale.x, transform.scale.y],
@@ -818,7 +818,7 @@ impl RenderElementData {
         }
     }
 
-    pub fn update_transform(&mut self, transform: &crate::NodeTransform) {
+    pub fn update_transform(&mut self, transform: &crate::ElementTransform) {
         self.center = [transform.position.x, transform.position.y];
         self.size = [transform.scale.x, transform.scale.y];
         self.rotation = transform.rotation;
@@ -973,7 +973,7 @@ impl RenderElement {
         }
     }
 
-    pub fn set_transform(&mut self, transform: &crate::NodeTransform, proxy: &GpuProxy) {
+    pub fn set_transform(&mut self, transform: &crate::ElementTransform, proxy: &GpuProxy) {
         self.data.update_transform(transform);
         self.write_all(proxy);
     }

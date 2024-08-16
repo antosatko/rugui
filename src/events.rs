@@ -58,7 +58,7 @@ pub enum EventTypes {
     Blur,
 }
 
-/// Node response to an event
+/// Element response to an event
 #[derive(Debug, Clone)]
 pub enum EventResponse<Msg>
 where

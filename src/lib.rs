@@ -14,7 +14,7 @@ pub struct Gui<Msg>
 where
     Msg: Clone,
 {
-    nodes: HashMap<ElementKey, Element<Msg>>,
+    elements: HashMap<ElementKey, Element<Msg>>,
     entry: Option<ElementKey>,
     last_key: u64,
     size: (u32, u32),
@@ -34,7 +34,7 @@ where
     pub fn new(size: (u32, u32), device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>) -> Self {
         let gpu = GpuBound::new(queue, device, size);
         let this = Self {
-            nodes: HashMap::new(),
+            elements: HashMap::new(),
             last_key: 0,
             entry: None,
             size,
@@ -47,29 +47,29 @@ where
     pub fn add_element(&mut self, element: Element<Msg>) -> ElementKey {
         let key = ElementKey { id: self.last_key };
         self.last_key += 1;
-        self.nodes.insert(key, element);
+        self.elements.insert(key, element);
         key
     }
 
-    pub fn remove_node(&mut self, key: ElementKey) {
-        self.nodes.remove(&key);
+    pub fn remove_element(&mut self, key: ElementKey) {
+        self.elements.remove(&key);
     }
 
-    pub fn get_node(&self, key: ElementKey) -> Option<&Element<Msg>> {
-        self.nodes.get(&key).map(|node| node)
+    pub fn get_element(&self, key: ElementKey) -> Option<&Element<Msg>> {
+        self.elements.get(&key).map(|element| element)
     }
 
-    pub fn get_node_mut(&mut self, key: ElementKey) -> Option<&mut Element<Msg>> {
-        self.nodes.get_mut(&key).map(|node| node)
+    pub fn get_element_mut(&mut self, key: ElementKey) -> Option<&mut Element<Msg>> {
+        self.elements.get_mut(&key).map(|element| element)
     }
 
     pub fn set_entry(&mut self, key: Option<ElementKey>) {
         if let Some(entry) = self.entry.take() {
-            self.remove_node(entry);
+            self.remove_element(entry);
         }
         self.entry = key;
         if let Some(key) = key {
-            let transform = NodeTransform {
+            let transform = ElementTransform {
                 position: Point2::new(self.size.0 as f32 / 2.0, self.size.1 as f32 / 2.0),
                 scale: Point2::new(self.size.0 as f32, self.size.1 as f32),
                 rotation: 0.0,
@@ -83,8 +83,8 @@ where
             Some(entry) => entry,
             None => return EventResponse::Ignored,
         };
-        let node = match self.nodes.get(entry_key) {
-            Some(node) => node,
+        let element = match self.elements.get(entry_key) {
+            Some(element) => element,
             None => return EventResponse::Ignored,
         };
         todo!("Handle the event")
@@ -103,7 +103,7 @@ where
         }
         self.transform_element(
             *entry_key,
-            &NodeTransform {
+            &ElementTransform {
                 position: Point2::new(size.0 as f32 / 2.0, size.1 as f32 / 2.0),
                 scale: Point2::new(size.0 as f32, size.1 as f32),
                 rotation: 0.0,
@@ -111,12 +111,12 @@ where
         );
     }
 
-    fn transform_element(&mut self, key: ElementKey, transform: &NodeTransform) {
-        let node = match self.nodes.get_mut(&key) {
-            Some(node) => node,
+    fn transform_element(&mut self, key: ElementKey, transform: &ElementTransform) {
+        let element = match self.elements.get_mut(&key) {
+            Some(element) => element,
             None => return,
         };
-        let styles = &node.styles;
+        let styles = &element.styles;
         let (width, height) = (
             styles.get_width(transform.scale.x),
             styles.get_height(transform.scale.y),
@@ -125,7 +125,7 @@ where
             styles.get_x(transform.position.x, transform.scale.x, width),
             styles.get_y(transform.position.y, transform.scale.y, height),
         );
-        let transform = NodeTransform {
+        let transform = ElementTransform {
             position: Point2::new(x, y),
             scale: Point2::new(width, height),
             rotation: 0.0,
@@ -133,28 +133,28 @@ where
         let color = styles.background.color;
         match &styles.background.texture {
             Some(texture) => {
-                node.render_element.set_texture(texture.clone());
+                element.render_element.set_texture(texture.clone());
             }
             _ => {}
         }
         if let Some(grad) = &styles.background.rad_gradient {
-            node.render_element.set_radial_gradient(grad.clone());
+            element.render_element.set_radial_gradient(grad.clone());
         }
         if let Some(grad) = &styles.background.lin_gradient {
-            node.render_element.set_linear_gradient(grad.clone());
+            element.render_element.set_linear_gradient(grad.clone());
         }
-        node.render_element.set_color(color, &self.gpu.proxy);
-        node.render_element
+        element.render_element.set_color(color, &self.gpu.proxy);
+        element.render_element
             .set_transform(&transform, &self.gpu.proxy);
-        match node.children.to_owned() {
+        match element.children.to_owned() {
             Children::Element(child) => {
-                let (pad_width, pad_height) = match &node.styles.padding {
+                let (pad_width, pad_height) = match &element.styles.padding {
                     Size::Fill => (width, height),
                     Size::Pixel(pad) => (*pad, *pad),
                     Size::Percent(pad) => (width * (pad / 100.), height * (pad / 100.)),
                     Size::None => (0.0, 0.0),
                 };
-                let transform = NodeTransform {
+                let transform = ElementTransform {
                     position: Point2::new(x, y),
                     scale: Point2::new(width - pad_width, height - pad_height),
                     rotation: 0.0,
@@ -163,13 +163,13 @@ where
                 return;
             }
             Children::Layers(children) => {
-                let (pad_width, pad_height) = match &node.styles.padding {
+                let (pad_width, pad_height) = match &element.styles.padding {
                     Size::Fill => (width, height),
                     Size::Pixel(pad) => (*pad, *pad),
                     Size::Percent(pad) => (width * (pad / 100.), height * (pad / 100.)),
                     Size::None => (0.0, 0.0),
                 };
-                let transform = NodeTransform {
+                let transform = ElementTransform {
                     position: Point2::new(x, y),
                     scale: Point2::new(width - pad_width, height - pad_height),
                     rotation: 0.0,
@@ -195,7 +195,7 @@ where
                         Size::Fill => remaining_height,
                         Size::None => remaining_height / len,
                     };
-                    let transform = NodeTransform {
+                    let transform = ElementTransform {
                         position: Point2::new(x, y + space / 2.0),
                         scale: Point2::new(width, space),
                         rotation: 0.0,
@@ -223,7 +223,7 @@ where
                         Size::Fill => remaining_width,
                         Size::None => remaining_width / len,
                     };
-                    let transform = NodeTransform {
+                    let transform = ElementTransform {
                         position: Point2::new(x + space / 2.0, y),
                         scale: Point2::new(space, height),
                         rotation: 0.0,
@@ -253,15 +253,15 @@ where
     }
 
     fn render_element<'a>(&'a self, key: ElementKey, pass: &mut wgpu::RenderPass<'a>) {
-        let node = match self.nodes.get(&key) {
-            Some(node) => node,
+        let element = match self.elements.get(&key) {
+            Some(element) => element,
             None => return,
         };
-        if !node.styles.visible {
+        if !element.styles.visible {
             return;
         }
-        node.render_element.render(&self.gpu.proxy.pipelines, pass);
-        match node.children.to_owned() {
+        element.render_element.render(&self.gpu.proxy.pipelines, pass);
+        match element.children.to_owned() {
             Children::Element(child) => {
                 self.render_element(child, pass);
             }
@@ -333,12 +333,12 @@ where
 }
 
 #[derive(Clone, Debug)]
-/// Transformation of a node
+/// Transformation of a element
 ///
-/// Node transformations are applied to the node and its children
-/// when the node is rendered for the first time or when the node
+/// Element transformations are applied to the element and its children
+/// when the element is rendered for the first time or when the element
 /// or its parent is resized
-pub struct NodeTransform {
+pub struct ElementTransform {
     /// Position in x and y of the top left corner
     pub position: Point2<f32>,
     /// Scale in width and height
