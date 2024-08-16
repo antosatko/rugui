@@ -6,7 +6,6 @@ use render::{Color, GpuBound, LinearGradient, RadialGradient, RenderElement};
 use styles::{Position, Size, StyleSheet};
 
 pub mod events;
-pub mod nodes;
 pub mod render;
 pub mod styles;
 pub mod texture;
@@ -102,11 +101,14 @@ where
         if self.debug {
             println!("Resizing window: x: {}, y: {}", size.0, size.1);
         }
-        self.transform_element(*entry_key, &NodeTransform {
-            position: Point2::new(size.0 as f32 / 2.0, size.1 as f32 / 2.0),
-            scale: Point2::new(size.0 as f32, size.1 as f32),
-            rotation: 0.0,
-        });
+        self.transform_element(
+            *entry_key,
+            &NodeTransform {
+                position: Point2::new(size.0 as f32 / 2.0, size.1 as f32 / 2.0),
+                scale: Point2::new(size.0 as f32, size.1 as f32),
+                rotation: 0.0,
+            },
+        );
     }
 
     fn transform_element(&mut self, key: ElementKey, transform: &NodeTransform) {
@@ -115,8 +117,14 @@ where
             None => return,
         };
         let styles = &node.styles;
-        let (width, height) = (styles.get_width(transform.scale.x), styles.get_height(transform.scale.y));
-        let (x, y) = (styles.get_x(transform.position.x, transform.scale.x, width), styles.get_y(transform.position.y, transform.scale.y, height));
+        let (width, height) = (
+            styles.get_width(transform.scale.x),
+            styles.get_height(transform.scale.y),
+        );
+        let (x, y) = (
+            styles.get_x(transform.position.x, transform.scale.x, width),
+            styles.get_y(transform.position.y, transform.scale.y, height),
+        );
         let transform = NodeTransform {
             position: Point2::new(x, y),
             scale: Point2::new(width, height),
@@ -136,7 +144,8 @@ where
             node.render_element.set_linear_gradient(grad.clone());
         }
         node.render_element.set_color(color, &self.gpu.proxy);
-        node.render_element.set_transform(&transform, &self.gpu.proxy);
+        node.render_element
+            .set_transform(&transform, &self.gpu.proxy);
         match node.children.to_owned() {
             Children::Element(child) => {
                 let (pad_width, pad_height) = match &node.styles.padding {
@@ -144,7 +153,7 @@ where
                     Size::Pixel(pad) => (*pad, *pad),
                     Size::Percent(pad) => (width * (pad / 100.), height * (pad / 100.)),
                     Size::None => (0.0, 0.0),
-                }; 
+                };
                 let transform = NodeTransform {
                     position: Point2::new(x, y),
                     scale: Point2::new(width - pad_width, height - pad_height),
@@ -240,7 +249,6 @@ where
         };
         pass.set_bind_group(0, &self.gpu.dimensions_bind_group, &[]);
 
-        
         self.render_element(*entry_key, pass);
     }
 
@@ -280,11 +288,19 @@ where
         Arc::new(texture::Texture::from_bytes(&self.gpu.proxy, bytes, label))
     }
 
-    pub fn texture_from_image(&self, img: &image::DynamicImage, label: Option<&str>) -> Arc<texture::Texture> {
+    pub fn texture_from_image(
+        &self,
+        img: &image::DynamicImage,
+        label: Option<&str>,
+    ) -> Arc<texture::Texture> {
         Arc::new(texture::Texture::from_image(&self.gpu.proxy, img, label))
     }
 
-    pub fn radial_gradient(&self, center: (Position, Color), outer: (Position, Color)) -> RadialGradient {
+    pub fn radial_gradient(
+        &self,
+        center: (Position, Color),
+        outer: (Position, Color),
+    ) -> RadialGradient {
         let mut grad = RadialGradient::zeroed(&self.gpu.proxy);
         let center_pos = center.0.normalized();
         grad.set_center(center_pos, &self.gpu.proxy);
@@ -300,7 +316,11 @@ where
         grad
     }
 
-    pub fn linear_gradient(&self, start: (Position, Color), end: (Position, Color)) -> LinearGradient {
+    pub fn linear_gradient(
+        &self,
+        start: (Position, Color),
+        end: (Position, Color),
+    ) -> LinearGradient {
         let mut grad = LinearGradient::zeroed(&self.gpu.proxy);
         let start_pos = start.0.normalized();
         grad.set_start(start_pos, &self.gpu.proxy);
@@ -314,7 +334,7 @@ where
 
 #[derive(Clone, Debug)]
 /// Transformation of a node
-/// 
+///
 /// Node transformations are applied to the node and its children
 /// when the node is rendered for the first time or when the node
 /// or its parent is resized
@@ -327,7 +347,10 @@ pub struct NodeTransform {
     pub rotation: f32,
 }
 
-pub struct Element <Msg> where Msg: Clone {
+pub struct Element<Msg>
+where
+    Msg: Clone,
+{
     pub label: Option<String>,
     pub render_element: RenderElement,
     pub styles: StyleSheet,
@@ -335,7 +358,10 @@ pub struct Element <Msg> where Msg: Clone {
     pub children: Children,
 }
 
-impl <Msg> Element <Msg> where Msg: Clone {
+impl<Msg> Element<Msg>
+where
+    Msg: Clone,
+{
     pub fn new(gui: &Gui<Msg>) -> Self {
         Self {
             label: None,

@@ -2,13 +2,16 @@ use std::sync::Arc;
 
 use bytemuck::Zeroable;
 
-use crate::{render::{Color, LinearGradient, RadialGradient}, texture::Texture};
+use crate::{
+    render::{Color, LinearGradient, RadialGradient},
+    texture::Texture,
+};
 
 pub struct StyleSheet {
     /// Rotation of the element
-    /// 
+    ///
     /// Rotation will be inherited by children
-    /// 
+    ///
     /// Not implemented yet
     pub rotation: Rotation,
     /// Position of the element relative to its parent
@@ -16,7 +19,7 @@ pub struct StyleSheet {
     /// Alignment of the element relative to itself
     pub align: Position,
     /// Width of the element
-    /// 
+    ///
     /// Can be overridden by min_width and max_width
     pub width: Size,
     /// Maximum width of the element that the element can not go above under any circumstances
@@ -24,7 +27,7 @@ pub struct StyleSheet {
     /// Minimum width of the element that the element can not go below under any circumstances
     pub min_width: Size,
     /// Height of the element
-    /// 
+    ///
     /// Can be overridden by min_height and max_height
     pub height: Size,
     /// Maximum height of the element that the element can not go above under any circumstances
@@ -32,33 +35,33 @@ pub struct StyleSheet {
     /// Minimum height of the element that the element can not go below under any circumstances
     pub min_height: Size,
     /// Background of the element
-    /// 
+    ///
     /// Each type of background can applied once
-    /// 
+    ///
     /// Order of rendering:
     /// 1. Texture
     /// 3. LinGradient
     /// 4. RadGradient
     /// 2. Color
-    /// 
+    ///
     /// Background is rgba(0, 0, 0, 0) by default
     pub background: Background,
     /// Border of the element
-    /// 
+    ///
     /// Not implemented yet
     pub border: Border,
     /// Margin of the element
-    /// 
+    ///
     /// Margin is the space between the element and its parent
     pub margin: Size,
     /// Padding of the element
-    /// 
+    ///
     /// Padding is the space between the element and its children
-    /// 
+    ///
     /// Not implemented yet
     pub padding: Size,
     /// Visibility of the element
-    /// 
+    ///
     /// If false, the element and its children will not be rendered
     pub visible: bool,
 }
@@ -156,9 +159,13 @@ impl StyleSheet {
 
     pub fn get_x(&self, parent_x: f32, parent_width: f32, width: f32) -> f32 {
         let x = match self.position {
-            Position::BottomLeft | Position::Left | Position::TopLeft => parent_x - parent_width / 2.0,
+            Position::BottomLeft | Position::Left | Position::TopLeft => {
+                parent_x - parent_width / 2.0
+            }
             Position::Bottom | Position::Center | Position::Top => parent_x,
-            Position::BottomRight | Position::Right | Position::TopRight => parent_x + parent_width / 2.0,
+            Position::BottomRight | Position::Right | Position::TopRight => {
+                parent_x + parent_width / 2.0
+            }
             Position::Custom(x, _) => match x {
                 Size::Pixel(x) => parent_x + x,
                 Size::Percent(percent) => parent_x + parent_width * (percent / 100.),
@@ -175,7 +182,7 @@ impl StyleSheet {
                 _ => 0.0,
             },
         };
-        
+
         x + align
     }
 
@@ -183,7 +190,9 @@ impl StyleSheet {
         let y = match self.position {
             Position::TopLeft | Position::Top | Position::TopRight => parent_y - height / 2.0,
             Position::Left | Position::Center | Position::Right => parent_y,
-            Position::BottomLeft | Position::Bottom | Position::BottomRight => parent_y + height / 2.0,
+            Position::BottomLeft | Position::Bottom | Position::BottomRight => {
+                parent_y + height / 2.0
+            }
             Position::Custom(_, y) => match y {
                 Size::Pixel(y) => parent_y + y,
                 Size::Percent(percent) => parent_y + parent_height * (percent / 100.),
@@ -200,7 +209,7 @@ impl StyleSheet {
                 _ => 0.0,
             },
         };
-        
+
         y + align
     }
 }
@@ -243,13 +252,13 @@ impl Position {
                     _ => 0.5,
                 };
                 [x, y]
-            },
+            }
         }
     }
 }
 
 /// Border of the element
-/// 
+///
 /// Not implemented yet
 pub struct Border {
     pub background: Background,
@@ -264,7 +273,7 @@ pub struct Border {
 
 #[derive(Clone, Copy, Debug, Default)]
 /// Size of the element
-/// 
+///
 /// Size is the width or height of the element
 pub enum Size {
     None,
@@ -276,7 +285,7 @@ pub enum Size {
 
 #[derive(Clone, Copy, Debug, Default)]
 /// Rotation of the element
-/// 
+///
 /// Not implemented yet
 pub enum Rotation {
     #[default]
@@ -289,19 +298,19 @@ pub enum Rotation {
 /// Background of the element
 pub struct Background {
     /// Color of the element
-    /// 
+    ///
     /// Color is rgba(0, 0, 0, 0) by default
-    /// 
+    ///
     /// Color is rendered last. If any other kind of background is applied,
     /// the color will be rendered last and can be used as a tint
     pub color: Color,
     pub texture: Option<Arc<Texture>>,
     /// Linear gradient of the element
-    /// 
+    ///
     /// Not implemented yet
     pub lin_gradient: Option<Arc<LinearGradient>>,
     /// Radial gradient of the element
-    /// 
+    ///
     /// Not implemented yet
     pub rad_gradient: Option<Arc<RadialGradient>>,
 }

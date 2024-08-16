@@ -87,8 +87,10 @@ impl GpuBound {
         let color_bind_group_layout = device.create_bind_group_layout(&Color::BIND_GROUP_LAYOUT);
         let texture_bind_group_layout =
             device.create_bind_group_layout(&Texture::BIND_GROUP_LAYOUT);
-        let radial_gradient_bind_group_layout = device.create_bind_group_layout(&RadialGradient::LAYOUT);
-        let linear_gradient_bind_group_layout = device.create_bind_group_layout(&LinearGradient::LAYOUT);
+        let radial_gradient_bind_group_layout =
+            device.create_bind_group_layout(&RadialGradient::LAYOUT);
+        let linear_gradient_bind_group_layout =
+            device.create_bind_group_layout(&LinearGradient::LAYOUT);
 
         let color_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -203,92 +205,100 @@ impl GpuBound {
                 push_constant_ranges: &[],
             });
 
-        let radial_gradient_shaders = device.create_shader_module(include_wgsl!("shaders/radial_grad.wgsl"));
+        let radial_gradient_shaders =
+            device.create_shader_module(include_wgsl!("shaders/radial_grad.wgsl"));
 
-        let radial_gradient_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Radial Gradient Pipeline"),
-            layout: Some(&radial_gradient_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &radial_gradient_shaders,
-                entry_point: "vs_main",
-                buffers: &[],
-                compilation_options: Default::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &radial_gradient_shaders,
-                entry_point: "fs_main",
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                conservative: false,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-            cache: None,
-        });
+        let radial_gradient_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Radial Gradient Pipeline"),
+                layout: Some(&radial_gradient_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &radial_gradient_shaders,
+                    entry_point: "vs_main",
+                    buffers: &[],
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &radial_gradient_shaders,
+                    entry_point: "fs_main",
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    conservative: false,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: None,
+                cache: None,
+            });
 
         let linear_gradient_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Linear Gradient Pipeline Layout"),
-                bind_group_layouts: &[&dimensions_bind_group_layout, &elements_bind_group_layout, &linear_gradient_bind_group_layout],
+                bind_group_layouts: &[
+                    &dimensions_bind_group_layout,
+                    &elements_bind_group_layout,
+                    &linear_gradient_bind_group_layout,
+                ],
                 push_constant_ranges: &[],
             });
 
-        let linear_gradient_shaders = device.create_shader_module(include_wgsl!("shaders/linear_grad.wgsl"));
+        let linear_gradient_shaders =
+            device.create_shader_module(include_wgsl!("shaders/linear_grad.wgsl"));
 
-        let linear_gradient_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Linear Gradient Pipeline"),
-            layout: Some(&linear_gradient_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &linear_gradient_shaders,
-                entry_point: "vs_main",
-                buffers: &[],
-                compilation_options: Default::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &linear_gradient_shaders,
-                entry_point: "fs_main",
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                conservative: false,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-            cache: None,
-        });
+        let linear_gradient_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Linear Gradient Pipeline"),
+                layout: Some(&linear_gradient_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &linear_gradient_shaders,
+                    entry_point: "vs_main",
+                    buffers: &[],
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &linear_gradient_shaders,
+                    entry_point: "fs_main",
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    conservative: false,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: None,
+                cache: None,
+            });
 
         Self {
             proxy: GpuProxy::new(
@@ -476,30 +486,30 @@ impl RadialGradient {
 
     pub fn set_center_color(&mut self, color: Color, proxy: &GpuProxy) {
         self.center_color = color;
-        proxy.queue.write_buffer(
-            &self.center_color_buffer,
-            0,
-            bytemuck::cast_slice(&[color]),
-        );
+        proxy
+            .queue
+            .write_buffer(&self.center_color_buffer, 0, bytemuck::cast_slice(&[color]));
     }
 
     pub fn set_center(&mut self, center: [f32; 2], proxy: &GpuProxy) {
         self.center = center;
-        proxy.queue.write_buffer(&self.center_buffer, 0, bytemuck::cast_slice(&[center]));
+        proxy
+            .queue
+            .write_buffer(&self.center_buffer, 0, bytemuck::cast_slice(&[center]));
     }
 
     pub fn set_radius(&mut self, radius: f32, proxy: &GpuProxy) {
         self.radius = radius;
-        proxy.queue.write_buffer(&self.radius_buffer, 0, bytemuck::cast_slice(&[radius]));
+        proxy
+            .queue
+            .write_buffer(&self.radius_buffer, 0, bytemuck::cast_slice(&[radius]));
     }
 
     pub fn set_outer_color(&mut self, color: Color, proxy: &GpuProxy) {
         self.outer_color = color;
-        proxy.queue.write_buffer(
-            &self.outer_color_buffer,
-            0,
-            bytemuck::cast_slice(&[color]),
-        );
+        proxy
+            .queue
+            .write_buffer(&self.outer_color_buffer, 0, bytemuck::cast_slice(&[color]));
     }
 
     pub fn bind(&self) -> &wgpu::BindGroup {
@@ -507,10 +517,22 @@ impl RadialGradient {
     }
 
     pub fn write_all(&self, proxy: &GpuProxy) {
-        proxy.queue.write_buffer(&self.center_color_buffer, 0, bytemuck::cast_slice(&[self.center_color]));
-        proxy.queue.write_buffer(&self.center_buffer, 0, bytemuck::cast_slice(&[self.center]));
-        proxy.queue.write_buffer(&self.radius_buffer, 0, bytemuck::cast_slice(&[self.radius]));
-        proxy.queue.write_buffer(&self.outer_color_buffer, 0, bytemuck::cast_slice(&[self.outer_color]));
+        proxy.queue.write_buffer(
+            &self.center_color_buffer,
+            0,
+            bytemuck::cast_slice(&[self.center_color]),
+        );
+        proxy
+            .queue
+            .write_buffer(&self.center_buffer, 0, bytemuck::cast_slice(&[self.center]));
+        proxy
+            .queue
+            .write_buffer(&self.radius_buffer, 0, bytemuck::cast_slice(&[self.radius]));
+        proxy.queue.write_buffer(
+            &self.outer_color_buffer,
+            0,
+            bytemuck::cast_slice(&[self.outer_color]),
+        );
     }
 }
 
@@ -672,30 +694,30 @@ impl LinearGradient {
 
     pub fn set_start_color(&mut self, color: Color, proxy: &GpuProxy) {
         self.start_color = color;
-        proxy.queue.write_buffer(
-            &self.start_color_buffer,
-            0,
-            bytemuck::cast_slice(&[color]),
-        );
+        proxy
+            .queue
+            .write_buffer(&self.start_color_buffer, 0, bytemuck::cast_slice(&[color]));
     }
 
     pub fn set_end_color(&mut self, color: Color, proxy: &GpuProxy) {
         self.end_color = color;
-        proxy.queue.write_buffer(
-            &self.end_color_buffer,
-            0,
-            bytemuck::cast_slice(&[color]),
-        );
+        proxy
+            .queue
+            .write_buffer(&self.end_color_buffer, 0, bytemuck::cast_slice(&[color]));
     }
 
     pub fn set_start(&mut self, start: [f32; 2], proxy: &GpuProxy) {
         self.start = start;
-        proxy.queue.write_buffer(&self.start_buffer, 0, bytemuck::cast_slice(&[start]));
+        proxy
+            .queue
+            .write_buffer(&self.start_buffer, 0, bytemuck::cast_slice(&[start]));
     }
 
     pub fn set_end(&mut self, end: [f32; 2], proxy: &GpuProxy) {
         self.end = end;
-        proxy.queue.write_buffer(&self.end_buffer, 0, bytemuck::cast_slice(&[end]));
+        proxy
+            .queue
+            .write_buffer(&self.end_buffer, 0, bytemuck::cast_slice(&[end]));
     }
 
     pub fn bind(&self) -> &wgpu::BindGroup {
@@ -703,13 +725,24 @@ impl LinearGradient {
     }
 
     pub fn write_all(&self, proxy: &GpuProxy) {
-        proxy.queue.write_buffer(&self.start_color_buffer, 0, bytemuck::cast_slice(&[self.start_color]));
-        proxy.queue.write_buffer(&self.end_color_buffer, 0, bytemuck::cast_slice(&[self.end_color]));
-        proxy.queue.write_buffer(&self.start_buffer, 0, bytemuck::cast_slice(&[self.start]));
-        proxy.queue.write_buffer(&self.end_buffer, 0, bytemuck::cast_slice(&[self.end]));
+        proxy.queue.write_buffer(
+            &self.start_color_buffer,
+            0,
+            bytemuck::cast_slice(&[self.start_color]),
+        );
+        proxy.queue.write_buffer(
+            &self.end_color_buffer,
+            0,
+            bytemuck::cast_slice(&[self.end_color]),
+        );
+        proxy
+            .queue
+            .write_buffer(&self.start_buffer, 0, bytemuck::cast_slice(&[self.start]));
+        proxy
+            .queue
+            .write_buffer(&self.end_buffer, 0, bytemuck::cast_slice(&[self.end]));
     }
 }
-
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
@@ -947,11 +980,9 @@ impl RenderElement {
 
     pub fn set_color(&mut self, color: Color, proxy: &GpuProxy) {
         self.data.color = color;
-        proxy.queue.write_buffer(
-            &self.color.buffer,
-            0,
-            bytemuck::cast_slice(&[color]),
-        );
+        proxy
+            .queue
+            .write_buffer(&self.color.buffer, 0, bytemuck::cast_slice(&[color]));
     }
 
     pub fn set_texture(&mut self, texture: Arc<Texture>) {
@@ -985,7 +1016,7 @@ impl RenderElement {
             0,
             bytemuck::cast_slice(&[self.data.rotation]),
         );
-        
+
         proxy.queue.write_buffer(
             &self.color.buffer,
             0,
@@ -997,11 +1028,7 @@ impl RenderElement {
         &self.bind_group
     }
 
-    pub fn render(
-        &self,
-        pipelines: &Pipelines,
-        pass: &mut wgpu::RenderPass,
-    ) {
+    pub fn render(&self, pipelines: &Pipelines, pass: &mut wgpu::RenderPass) {
         if let Some(texture) = &self.texture {
             pass.set_pipeline(&pipelines.texture_pipeline);
             pass.set_bind_group(1, self.bind(), &[]);
