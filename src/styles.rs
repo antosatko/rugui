@@ -219,6 +219,35 @@ pub enum Position {
     Custom(Size, Size),
 }
 
+impl Position {
+    pub fn normalized(&self) -> [f32; 2] {
+        match self {
+            Position::Top => [0.5, 0.0],
+            Position::TopLeft => [0.0, 0.0],
+            Position::TopRight => [1.0, 0.0],
+            Position::Right => [1.0, 0.5],
+            Position::Bottom => [0.5, 1.0],
+            Position::BottomRight => [1.0, 1.0],
+            Position::BottomLeft => [0.0, 1.0],
+            Position::Left => [0.0, 0.5],
+            Position::Center => [0.5, 0.5],
+            Position::Custom(x, y) => {
+                let x = match x {
+                    Size::Pixel(x) => *x,
+                    Size::Percent(percent) => *percent / 100.0,
+                    _ => 0.5,
+                };
+                let y = match y {
+                    Size::Pixel(y) => *y,
+                    Size::Percent(percent) => *percent / 100.0,
+                    _ => 0.5,
+                };
+                [x, y]
+            },
+        }
+    }
+}
+
 /// Border of the element
 /// 
 /// Not implemented yet

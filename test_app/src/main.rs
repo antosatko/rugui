@@ -94,24 +94,8 @@ impl ApplicationHandler for App {
         // experimental radial gradient
         // this is a subject to change
         let grad = gui.radial_gradient(
-            // center, 
-            [0.5, 0.0],
-            // radius, 
-            0.5,
-            // outer_color,
-            Color {
-                r: 1.0,
-                g: 0.0,
-                b: 0.0,
-                a: 1.0,
-            }, 
-            // color
-            Color {
-                r: 0.5,
-                g: 0.5,
-                b: 0.5,
-                a: 0.0,
-            }
+            (Position::Center, Color::BLUE),
+            (Position::TopLeft, Color::MAGENTA),
         );
         column2_styles.background.rad_gradient = Some(Arc::new(grad));
         column2_styles.margin = Size::Percent(50.0);

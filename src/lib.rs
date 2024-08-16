@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use events::{EventResponse, EventTypes};
 use nalgebra::Point2;
 use render::{Color, GpuBound, RadialGradient, RenderElement};
-use styles::{Size, StyleSheet};
+use styles::{Position, Size, StyleSheet};
 
 pub mod events;
 pub mod nodes;
@@ -281,12 +281,19 @@ where
         Arc::new(texture::Texture::from_image(&self.gpu.proxy, img, label))
     }
 
-    pub fn radial_gradient(&self, center: [f32; 2], radius: f32, outer_color: Color, color: Color) -> RadialGradient {
+    pub fn radial_gradient(&self, center: (Position, Color), outer: (Position, Color)) -> RadialGradient {
         let mut grad = RadialGradient::zeroed(&self.gpu.proxy);
-        grad.set_center(center, &self.gpu.proxy);
-        grad.set_radius(radius, &self.gpu.proxy);
-        grad.set_center_color(color, &self.gpu.proxy);
-        grad.set_outer_color(outer_color, &self.gpu.proxy);
+        let center_pos = center.0.normalized();
+        grad.set_center(center_pos, &self.gpu.proxy);
+        let outer_pos = outer.0.normalized();
+        let dist = {
+            let x = center_pos[0] - outer_pos[0];
+            let y = center_pos[1] - outer_pos[1];
+            (x * x + y * y).sqrt()
+        };
+        grad.set_radius(dist, &self.gpu.proxy);
+        grad.set_center_color(center.1, &self.gpu.proxy);
+        grad.set_outer_color(outer.1, &self.gpu.proxy);
         grad
     }
 }
