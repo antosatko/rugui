@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use events::{EventResponse, EventTypes};
 use nalgebra::Point2;
-use render::{Color, GpuBound, RadialGradient, RenderElement};
+use render::{Color, GpuBound, LinearGradient, RadialGradient, RenderElement};
 use styles::{Position, Size, StyleSheet};
 
 pub mod events;
@@ -131,6 +131,9 @@ where
         }
         if let Some(grad) = &styles.background.rad_gradient {
             node.render_element.set_radial_gradient(grad.clone());
+        }
+        if let Some(grad) = &styles.background.lin_gradient {
+            node.render_element.set_linear_gradient(grad.clone());
         }
         node.render_element.set_color(color, &self.gpu.proxy);
         node.render_element.set_transform(&transform, &self.gpu.proxy);
@@ -294,6 +297,17 @@ where
         grad.set_radius(dist, &self.gpu.proxy);
         grad.set_center_color(center.1, &self.gpu.proxy);
         grad.set_outer_color(outer.1, &self.gpu.proxy);
+        grad
+    }
+
+    pub fn linear_gradient(&self, start: (Position, Color), end: (Position, Color)) -> LinearGradient {
+        let mut grad = LinearGradient::zeroed(&self.gpu.proxy);
+        let start_pos = start.0.normalized();
+        grad.set_start(start_pos, &self.gpu.proxy);
+        let end_pos = end.0.normalized();
+        grad.set_end(end_pos, &self.gpu.proxy);
+        grad.set_start_color(start.1, &self.gpu.proxy);
+        grad.set_end_color(end.1, &self.gpu.proxy);
         grad
     }
 }

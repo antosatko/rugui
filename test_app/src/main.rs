@@ -81,12 +81,10 @@ impl ApplicationHandler for App {
         let mut column3 = Element::new(&gui).with_label("Column 3".to_string());
 
         let column1_styles = &mut column1.styles;
-        column1_styles.background.color = Color {
-            r: 0.0,
-            g: 0.0,
-            b: 0.6,
-            a: 0.5,
-        };
+        column1_styles.background.lin_gradient = Some(Arc::new(gui.linear_gradient(
+            (Position::Top, Color::RED.with_alpha(0.3)),
+            (Position::Center, Color::TRANSPARENT),
+        )));
         column1_styles.background.texture = Some(texture.clone());
         column1_styles.margin = Size::Percent(-5.0);
 

@@ -4,7 +4,8 @@ struct VertexInput {
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) v_tex_coords: vec2<f32>,
+    @location(0) v_grad_coords: vec2<f32>,
+    
 }
 
 @group(0)@binding(0) var<uniform> screen_size: vec2<f32>;
@@ -13,8 +14,11 @@ struct VertexOutput {
 @group(1)@binding(1) var<uniform> size: vec2<f32>;
 @group(1)@binding(2) var<uniform> rotation: f32;
 
-@group(2)@binding(0) var t_diffuse: texture_2d<f32>;
-@group(2)@binding(1) var t_sampler: sampler;
+@group(2)@binding(0) var<uniform> start_color: vec4<f32>;
+@group(2)@binding(1) var<uniform> end_color: vec4<f32>;
+@group(2)@binding(2) var<uniform> start: vec2<f32>;
+@group(2)@binding(3) var<uniform> end: vec2<f32>;
+
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
@@ -22,7 +26,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
     // Calculate vertex position
     var position = vertex_position(in.index);
-    out.v_tex_coords = position + 0.5;
+    out.v_grad_coords = position + 0.5;
 
     // Scale and rotate the position
     var scale = vec2(size.x * position.x, size.y * position.y);
@@ -47,7 +51,12 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0)vec4<f32> {
-    return textureSample(t_diffuse, t_sampler, in.v_tex_coords);
+    // Calculate the gradient factor based on the interpolated coordinates
+    var gradient_factor = dot(in.v_grad_coords - start, end - start) / dot(end - start, end - start);
+
+    // Mix between start_color and end_color based on gradient_factor
+    return mix(start_color, end_color, clamp(gradient_factor, 0.0, 1.0));
+    
 }
 
 
