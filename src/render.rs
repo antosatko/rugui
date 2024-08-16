@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use nalgebra::Point2;
 use wgpu::include_wgsl;
 
 use crate::texture::Texture;
@@ -289,6 +290,22 @@ impl RenderElementData {
         self.center = [transform.position.x, transform.position.y];
         self.size = [transform.scale.x, transform.scale.y];
         self.rotation = transform.rotation;
+    }
+
+    pub fn point_collision(&self, point: Point2<f32>) -> bool {
+        let rotated_point = Point2::new(
+            (point.x - self.center[0]) * self.rotation.cos()
+                - (point.y - self.center[1]) * self.rotation.sin(),
+            (point.x - self.center[0]) * self.rotation.sin()
+                + (point.y - self.center[1]) * self.rotation.cos(),
+        );
+
+        let (width, height) = (self.size[0] / 2.0, self.size[1] / 2.0);
+
+        rotated_point.x >= -width
+            && rotated_point.x <= width
+            && rotated_point.y >= -height
+            && rotated_point.y <= height
     }
 }
 

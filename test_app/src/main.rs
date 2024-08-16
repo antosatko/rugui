@@ -1,6 +1,11 @@
 use std::sync::Arc;
 
-use rugui::{render::Color, styles::{Position, Positions, Size}, texture::Texture, Children, Element, Gui};
+use rugui::{
+    render::Color,
+    styles::{Position, Rotation, Size},
+    texture::Texture,
+    Children, Element, Gui, Spacing,
+};
 use winit::{application::ApplicationHandler, window};
 
 fn main() {
@@ -43,8 +48,9 @@ impl ApplicationHandler for App {
         let drawing = pollster::block_on(Drawing::new(window.clone()));
         let mut gui: Gui<Message> =
             Gui::new((800, 600), drawing.device.clone(), drawing.queue.clone());
+        gui.debug = true;
 
-        let texture = Arc::new(gui.texture_from_bytes(include_bytes!("they.webp"), "sdf"));
+        let texture = gui.texture_from_bytes(include_bytes!("they.webp"), "sdf");
 
         let mut rows = Element::new(&gui).with_label("Hello".to_string());
         let styles = &mut rows.styles;
@@ -57,9 +63,9 @@ impl ApplicationHandler for App {
 
         let row1_styles = &mut row1.styles;
         row1_styles.background.texture = Some(texture.clone());
-        row1_styles.position = Positions::Align(Position::Left);
+        row1_styles.position = Position::Left;
+        row1_styles.align = Position::Left;
         row1_styles.width = Size::Pixel(200.0);
-        //row1_styles.margin = Size::Pixel(10.0);
 
         let row2_styles = &mut row2.styles;
         row2_styles.background.color = Color {
@@ -67,6 +73,57 @@ impl ApplicationHandler for App {
             g: 0.6,
             b: 0.0,
             a: 0.5,
+        };
+
+        let mut columns = Element::new(&gui).with_label("Columns".to_string());
+        let mut column1 = Element::new(&gui).with_label("Column 1".to_string());
+        let mut column2 = Element::new(&gui).with_label("Column 2".to_string());
+        let mut column3 = Element::new(&gui).with_label("Column 3".to_string());
+
+        let column1_styles = &mut column1.styles;
+        column1_styles.background.color = Color {
+            r: 0.0,
+            g: 0.0,
+            b: 0.6,
+            a: 0.5,
+        };
+        column1_styles.background.texture = Some(texture.clone());
+        column1_styles.margin = Size::Percent(-5.0);
+
+        let column2_styles = &mut column2.styles;
+        column2_styles.background.color = Color {
+            r: 1.0,
+            g: 1.0,
+            b: 1.0,
+            a: 1.0,
+        };
+        column2_styles.margin = Size::Percent(50.0);
+
+        let column3_styles = &mut column3.styles;
+        column3_styles.background.color = Color {
+            r: 0.5,
+            g: 0.5,
+            b: 0.5,
+            a: 0.5,
+        };
+        column3_styles.margin = Size::Percent(5.0);
+
+        columns.children = Children::Columns {
+            children: vec![
+                Spacing {
+                    element: gui.add_element(column1),
+                    spacing: Size::Percent(70.0),
+                },
+                Spacing {
+                    element: gui.add_element(column2),
+                    spacing: Size::None,
+                },
+                Spacing {
+                    element: gui.add_element(column3),
+                    spacing: Size::None,
+                },
+            ],
+            spacing: Size::Fill,
         };
 
         let row3_styles = &mut row3.styles;
@@ -78,13 +135,24 @@ impl ApplicationHandler for App {
         };
         row3_styles.min_height = Size::Pixel(200.0);
         row3_styles.background.texture = Some(texture.clone());
-        row3_styles.position = Positions::Center(Position::TopRight);
+        row3_styles.position = Position::BottomRight;
+
+        row2.children = Children::Element(gui.add_element(columns));
 
         rows.children = Children::Rows {
             children: vec![
-                gui.add_element(row1),
-                gui.add_element(row2),
-                gui.add_element(row3),
+                Spacing {
+                    element: gui.add_element(row1),
+                    spacing: Size::None,
+                },
+                Spacing {
+                    element: gui.add_element(row2),
+                    spacing: Size::None,
+                },
+                Spacing {
+                    element: gui.add_element(row3),
+                    spacing: Size::None,
+                },
             ],
             spacing: Size::Fill,
         };

@@ -20,6 +20,7 @@ where
     last_key: u64,
     size: (u32, u32),
     gpu: GpuBound,
+    pub debug: bool,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
@@ -39,6 +40,7 @@ where
             entry: None,
             size,
             gpu,
+            debug: false,
         };
         this
     }
@@ -97,6 +99,9 @@ where
         } else {
             return;
         };
+        if self.debug {
+            println!("Resizing window: x: {}, y: {}", size.0, size.1);
+        }
         self.transform_element(*entry_key, &NodeTransform {
             position: Point2::new(size.0 as f32 / 2.0, size.1 as f32 / 2.0),
             scale: Point2::new(size.0 as f32, size.1 as f32),
@@ -128,10 +133,32 @@ where
         node.render_element.set_transform(&transform, &self.gpu.proxy);
         match node.children.to_owned() {
             Children::Element(child) => {
+                let (pad_width, pad_height) = match &node.styles.padding {
+                    Size::Fill => (width, height),
+                    Size::Pixel(pad) => (*pad, *pad),
+                    Size::Percent(pad) => (width * (pad / 100.), height * (pad / 100.)),
+                    Size::None => (0.0, 0.0),
+                }; 
+                let transform = NodeTransform {
+                    position: Point2::new(x, y),
+                    scale: Point2::new(width - pad_width, height - pad_height),
+                    rotation: 0.0,
+                };
                 self.transform_element(child.clone(), &transform);
                 return;
             }
             Children::Layers(children) => {
+                let (pad_width, pad_height) = match &node.styles.padding {
+                    Size::Fill => (width, height),
+                    Size::Pixel(pad) => (*pad, *pad),
+                    Size::Percent(pad) => (width * (pad / 100.), height * (pad / 100.)),
+                    Size::None => (0.0, 0.0),
+                };
+                let transform = NodeTransform {
+                    position: Point2::new(x, y),
+                    scale: Point2::new(width - pad_width, height - pad_height),
+                    rotation: 0.0,
+                };
                 for child in children {
                     self.transform_element(child, &transform);
                 }
@@ -140,26 +167,56 @@ where
                 if children.is_empty() {
                     return;
                 }
-                let step = transform.scale.y / children.len() as f32;
-                let y = transform.position.y - transform.scale.y / 2.0 + step / 2.0;
-                for (idx, child) in children.iter().enumerate() {
-                    let mut child_transform = transform.clone();
-                    child_transform.scale.y = step;
-                    child_transform.position.y = y + step * idx as f32;
-                    self.transform_element(*child, &child_transform);
+                let mut len = children.len() as f32;
+                let mut remaining_height = height;
+                let mut y = y - height / 2.0;
+                for Spacing { element, spacing } in children {
+                    if remaining_height <= 0.0 {
+                        break;
+                    }
+                    let space = match spacing {
+                        Size::Pixel(space) => space,
+                        Size::Percent(space) => height * (space / 100.),
+                        Size::Fill => remaining_height,
+                        Size::None => remaining_height / len,
+                    };
+                    let transform = NodeTransform {
+                        position: Point2::new(x, y + space / 2.0),
+                        scale: Point2::new(width, space),
+                        rotation: 0.0,
+                    };
+                    self.transform_element(element, &transform);
+                    y += space;
+                    remaining_height -= space;
+                    len -= 1.0;
                 }
             }
             Children::Columns { children, .. } => {
                 if children.is_empty() {
                     return;
                 }
-                let step = transform.scale.x / children.len() as f32;
-                let x = transform.position.x - transform.scale.x / 2.0 + step / 2.0;
-                for (idx, child) in children.iter().enumerate() {
-                    let mut child_transform = transform.clone();
-                    child_transform.scale.x = step;
-                    child_transform.position.x = x + step * idx as f32;
-                    self.transform_element(*child, &child_transform);
+                let mut len = children.len() as f32;
+                let mut remaining_width = width;
+                let mut x = x - width / 2.0;
+                for Spacing { element, spacing } in children {
+                    if remaining_width <= 0.0 {
+                        break;
+                    }
+                    let space = match spacing {
+                        Size::Pixel(space) => space,
+                        Size::Percent(space) => width * (space / 100.),
+                        Size::Fill => remaining_width,
+                        Size::None => remaining_width / len,
+                    };
+                    let transform = NodeTransform {
+                        position: Point2::new(x + space / 2.0, y),
+                        scale: Point2::new(space, height),
+                        rotation: 0.0,
+                    };
+                    self.transform_element(element, &transform);
+                    x += space;
+                    remaining_width -= space;
+                    len -= 1.0;
                 }
             }
             Children::None => return,
@@ -176,6 +233,7 @@ where
             None => return,
         };
         pass.set_bind_group(0, &self.gpu.dimensions_bind_group, &[]);
+
         
         self.render_element(*entry_key, pass);
     }
@@ -200,24 +258,24 @@ where
             }
             Children::Rows { children, .. } => {
                 for child in children {
-                    self.render_element(child, pass);
+                    self.render_element(child.element, pass);
                 }
             }
             Children::Columns { children, .. } => {
                 for child in children {
-                    self.render_element(child, pass);
+                    self.render_element(child.element, pass);
                 }
             }
             Children::None => return,
         }
     }
 
-    pub fn texture_from_bytes(&self, bytes: &[u8], label: &str) -> texture::Texture {
-        texture::Texture::from_bytes(&self.gpu.proxy, bytes, label)
+    pub fn texture_from_bytes(&self, bytes: &[u8], label: &str) -> Arc<texture::Texture> {
+        Arc::new(texture::Texture::from_bytes(&self.gpu.proxy, bytes, label))
     }
 
-    pub fn texture_from_image(&self, img: &image::DynamicImage, label: Option<&str>) -> texture::Texture {
-        texture::Texture::from_image(&self.gpu.proxy, img, label)
+    pub fn texture_from_image(&self, img: &image::DynamicImage, label: Option<&str>) -> Arc<texture::Texture> {
+        Arc::new(texture::Texture::from_image(&self.gpu.proxy, img, label))
     }
 }
 
@@ -281,13 +339,19 @@ pub enum Children {
     Element(ElementKey),
     Layers(Vec<ElementKey>),
     Rows {
-        children: Vec<ElementKey>,
+        children: Vec<Spacing>,
         spacing: Size,
     },
     Columns {
-        children: Vec<ElementKey>,
+        children: Vec<Spacing>,
         spacing: Size,
     },
 
     None,
+}
+
+#[derive(Clone, Debug)]
+pub struct Spacing {
+    pub element: ElementKey,
+    pub spacing: Size,
 }

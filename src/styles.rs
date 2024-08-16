@@ -1,4 +1,4 @@
-use std::{default, sync::Arc};
+use std::sync::Arc;
 
 use bytemuck::Zeroable;
 
@@ -8,8 +8,13 @@ pub struct StyleSheet {
     /// Rotation of the element
     /// 
     /// Rotation will be inherited by children
+    /// 
+    /// Not implemented yet
     pub rotation: Rotation,
-    pub position: Positions,
+    /// Position of the element relative to its parent
+    pub position: Position,
+    /// Alignment of the element relative to itself
+    pub align: Position,
     /// Width of the element
     /// 
     /// Can be overridden by min_width and max_width
@@ -62,7 +67,8 @@ impl Default for StyleSheet {
     fn default() -> Self {
         Self {
             rotation: Rotation::None,
-            position: Positions::Center(Position::Center),
+            position: Position::Center,
+            align: Position::Center,
             width: Size::Fill,
             max_width: Size::None,
             min_width: Size::None,
@@ -149,67 +155,53 @@ impl StyleSheet {
     }
 
     pub fn get_x(&self, parent_x: f32, parent_width: f32, width: f32) -> f32 {
-        let gap = parent_width - width;
-        let x = match &self.position {
-            Positions::Center(pos) => match pos {
-                Position::BottomLeft | Position::Left | Position::TopLeft => parent_x - width / 2.0,
-                Position::Bottom | Position::Center | Position::Top => parent_x,
-                Position::BottomRight | Position::Right | Position::TopRight => parent_x + width / 2.0,
-                Position::Custom(x, _) => match x {
-                    Size::Pixel(x) => parent_x + x,
-                    Size::Percent(percent) => parent_x + width * (percent / 100.),
-                    _ => parent_x
-                },
-            },
-            Positions::Align(pos) => match pos {
-                Position::Bottom | Position::Center | Position::Top => parent_x,
-                Position::Custom(x, _) => match x {
-                    Size::Pixel(x) => parent_x + x,
-                    Size::Percent(percent) => parent_x + width * (percent / 100.),
-                    _ => parent_x
-                },
-                Position::BottomLeft | Position::Left | Position::TopLeft => parent_x - gap / 2.0,
-                Position::BottomRight | Position::Right | Position::TopRight => parent_x + gap / 2.0,
+        let x = match self.position {
+            Position::BottomLeft | Position::Left | Position::TopLeft => parent_x - parent_width / 2.0,
+            Position::Bottom | Position::Center | Position::Top => parent_x,
+            Position::BottomRight | Position::Right | Position::TopRight => parent_x + parent_width / 2.0,
+            Position::Custom(x, _) => match x {
+                Size::Pixel(x) => parent_x + x,
+                Size::Percent(percent) => parent_x + parent_width * (percent / 100.),
+                _ => parent_x,
             },
         };
-        let margin = match self.margin {
-            Size::Pixel(width) => width,
-            Size::Percent(percent) => width * (percent / 100.),
-            _ => 0.0,
+        let align = match self.align {
+            Position::BottomLeft | Position::Left | Position::TopLeft => width / 2.0,
+            Position::Bottom | Position::Center | Position::Top => 0.0,
+            Position::BottomRight | Position::Right | Position::TopRight => -width / 2.0,
+            Position::Custom(x, _) => match x {
+                Size::Pixel(x) => x,
+                Size::Percent(percent) => width * (percent / 100.),
+                _ => 0.0,
+            },
         };
-        x + margin
+        
+        x + align
     }
 
     pub fn get_y(&self, parent_y: f32, parent_height: f32, height: f32) -> f32 {
-        let gap = parent_height - height;
-        let y = match &self.position {
-            Positions::Center(pos) => match pos {
-                Position::TopLeft | Position::Top | Position::TopRight => parent_y + height / 2.0,
-                Position::Left | Position::Center | Position::Right => parent_y,
-                Position::BottomLeft | Position::Bottom | Position::BottomRight => parent_y - height / 2.0,
-                Position::Custom(_, y) => match y {
-                    Size::Pixel(y) => parent_y + y,
-                    Size::Percent(percent) => parent_y + height * (percent / 100.),
-                    _ => parent_y
-                },
-            },
-            Positions::Align(pos) => match pos {
-                Position::Left | Position::Center | Position::Right => parent_y,
-                Position::Custom(_, y) => match y {
-                    Size::Pixel(y) => parent_y + y,
-                    Size::Percent(percent) => parent_y + height * (percent / 100.),
-                    _ => parent_y
-                },
-                Position::TopLeft | Position::Top | Position::TopRight => parent_y + gap / 2.0,
-                Position::BottomLeft | Position::Bottom | Position::BottomRight => parent_y - gap / 2.0,
+        let y = match self.position {
+            Position::TopLeft | Position::Top | Position::TopRight => parent_y - height / 2.0,
+            Position::Left | Position::Center | Position::Right => parent_y,
+            Position::BottomLeft | Position::Bottom | Position::BottomRight => parent_y + height / 2.0,
+            Position::Custom(_, y) => match y {
+                Size::Pixel(y) => parent_y + y,
+                Size::Percent(percent) => parent_y + parent_height * (percent / 100.),
+                _ => parent_y,
             },
         };
-        let margin = match self.margin {
-            Size::Pixel(height) => height,
-            Size::Percent(percent) => height * (percent / 100.),
-            _ => 0.0,
+        let align = match self.align {
+            Position::TopLeft | Position::Top | Position::TopRight => height / 2.0,
+            Position::Left | Position::Center | Position::Right => 0.0,
+            Position::BottomLeft | Position::Bottom | Position::BottomRight => -height / 2.0,
+            Position::Custom(_, y) => match y {
+                Size::Pixel(y) => y,
+                Size::Percent(percent) => height * (percent / 100.),
+                _ => 0.0,
+            },
         };
-        y + margin
+        
+        y + align
     }
 }
 
@@ -225,12 +217,6 @@ pub enum Position {
     Left,
     Center,
     Custom(Size, Size),
-}
-
-/// Element placement method
-pub enum Positions {
-    Center(Position),
-    Align(Position),
 }
 
 /// Border of the element
