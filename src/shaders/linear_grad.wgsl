@@ -51,12 +51,9 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0)vec4<f32> {
-    // Calculate the gradient factor based on the interpolated coordinates
     var gradient_factor = dot(in.v_grad_coords - start, end - start) / dot(end - start, end - start);
 
-    // Mix between start_color and end_color based on gradient_factor
     return mix(start_color, end_color, clamp(gradient_factor, 0.0, 1.0));
-    
 }
 
 

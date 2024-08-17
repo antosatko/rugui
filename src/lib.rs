@@ -125,17 +125,20 @@ where
             styles.get_x(transform.position.x, transform.scale.x, width),
             styles.get_y(transform.position.y, transform.scale.y, height),
         );
+        let rotation = match styles.rotation  {
+            styles::Rotation::None => 0.0,
+            styles::Rotation::Deg(deg) => deg.to_radians(),
+            styles::Rotation::Rad(rad) => rad,
+            styles::Rotation::Percent(percent) => (percent / 50.0) * std::f32::consts::PI,
+        };
         let transform = ElementTransform {
             position: Point2::new(x, y),
             scale: Point2::new(width, height),
-            rotation: 0.0,
+            rotation: rotation + transform.rotation,
         };
         let color = styles.background.color;
-        match &styles.background.texture {
-            Some(texture) => {
-                element.render_element.set_texture(texture.clone());
-            }
-            _ => {}
+        if let Some(texture) = &styles.background.texture {
+            element.render_element.set_texture(texture.clone());
         }
         if let Some(grad) = &styles.background.rad_gradient {
             element.render_element.set_radial_gradient(grad.clone());
@@ -157,7 +160,7 @@ where
                 let transform = ElementTransform {
                     position: Point2::new(x, y),
                     scale: Point2::new(width - pad_width, height - pad_height),
-                    rotation: 0.0,
+                    rotation: transform.rotation,
                 };
                 self.transform_element(child.clone(), &transform);
                 return;
@@ -172,7 +175,7 @@ where
                 let transform = ElementTransform {
                     position: Point2::new(x, y),
                     scale: Point2::new(width - pad_width, height - pad_height),
-                    rotation: 0.0,
+                    rotation: transform.rotation,
                 };
                 for child in children {
                     self.transform_element(child, &transform);
@@ -195,10 +198,17 @@ where
                         Size::Fill => remaining_height,
                         Size::None => remaining_height / len,
                     };
+                    let position = if transform.rotation == 0.0 {
+                        Point2::new(x, y + space / 2.0)
+                    } else {
+                        let pivot = transform.position;
+                        let point = Point2::new(x, y + space / 2.0);
+                        rotate_point(point, pivot, transform.rotation)
+                    };
                     let transform = ElementTransform {
-                        position: Point2::new(x, y + space / 2.0),
+                        position,
                         scale: Point2::new(width, space),
-                        rotation: 0.0,
+                        rotation: transform.rotation,
                     };
                     self.transform_element(element, &transform);
                     y += space;
@@ -223,10 +233,17 @@ where
                         Size::Fill => remaining_width,
                         Size::None => remaining_width / len,
                     };
+                    let position = if transform.rotation == 0.0 {
+                        Point2::new(x + space / 2.0, y)
+                    } else {
+                        let pivot = transform.position;
+                        let point = Point2::new(x + space / 2.0, y);
+                        rotate_point(point, pivot, transform.rotation)
+                    };
                     let transform = ElementTransform {
-                        position: Point2::new(x + space / 2.0, y),
+                        position,
                         scale: Point2::new(space, height),
-                        rotation: 0.0,
+                        rotation: transform.rotation,
                     };
                     self.transform_element(element, &transform);
                     x += space;
@@ -413,4 +430,17 @@ pub enum Children {
 pub struct Spacing {
     pub element: ElementKey,
     pub spacing: Size,
+}
+
+
+fn rotate_point(point: Point2<f32>, pivot: Point2<f32>, angle: f32) -> Point2<f32> {
+    let sin = angle.sin();
+    let cos = angle.cos();
+    let translated_x = point.x - pivot.x;
+    let translated_y = point.y - pivot.y;
+
+    let rotated_x = translated_x * cos - translated_y * sin;
+    let rotated_y = translated_x * sin + translated_y * cos;
+
+    Point2::new(rotated_x + pivot.x, rotated_y + pivot.y)
 }

@@ -67,14 +67,6 @@ impl ApplicationHandler for App {
         row1_styles.align = Position::Left;
         row1_styles.width = Size::Pixel(200.0);
 
-        let row2_styles = &mut row2.styles;
-        row2_styles.background.color = Color {
-            r: 0.0,
-            g: 0.6,
-            b: 0.0,
-            a: 0.5,
-        };
-
         let mut columns = Element::new(&gui).with_label("Columns".to_string());
         let mut column1 = Element::new(&gui).with_label("Column 1".to_string());
         let mut column2 = Element::new(&gui).with_label("Column 2".to_string());
@@ -92,11 +84,12 @@ impl ApplicationHandler for App {
         // experimental radial gradient
         // this is a subject to change
         let grad = gui.radial_gradient(
-            (Position::Center, Color::BLUE),
-            (Position::TopLeft, Color::MAGENTA),
+            (Position::Center, Color::YELLOW),
+            (Position::Top, Color::WHITE.with_alpha(0.0)),
         );
         column2_styles.background.rad_gradient = Some(Arc::new(grad));
         column2_styles.margin = Size::Percent(50.0);
+        column2_styles.rotation = Rotation::Deg(90.0);
 
         let column3_styles = &mut column3.styles;
         column3_styles.background.color = Color {
@@ -135,6 +128,15 @@ impl ApplicationHandler for App {
         row3_styles.min_height = Size::Pixel(200.0);
         row3_styles.background.texture = Some(texture.clone());
         row3_styles.position = Position::BottomRight;
+
+        let columns_styles = &mut columns.styles;
+        columns_styles.background.color = Color {
+            r: 0.6,
+            g: 0.6,
+            b: 0.6,
+            a: 0.3,
+        };
+        columns_styles.rotation = Rotation::Deg(-10.0);
 
         row2.children = Children::Element(gui.add_element(columns));
 
