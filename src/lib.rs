@@ -118,23 +118,27 @@ where
         };
         let styles = &element.styles;
         let (width, height) = (
-            styles.get_width(transform.scale.x),
-            styles.get_height(transform.scale.y),
+            styles.get_width(transform.scale.x, self.size.0 as f32),
+            styles.get_height(transform.scale.y, self.size.1 as f32),
         );
         let (x, y) = (
             styles.get_x(transform.position.x, transform.scale.x, width),
             styles.get_y(transform.position.y, transform.scale.y, height),
         );
         let rotation = match styles.rotation  {
-            styles::Rotation::None => 0.0,
-            styles::Rotation::Deg(deg) => deg.to_radians(),
-            styles::Rotation::Rad(rad) => rad,
-            styles::Rotation::Percent(percent) => (percent / 50.0) * std::f32::consts::PI,
+            styles::Rotation::None => transform.rotation,
+            styles::Rotation::AbsNone => 0.0,
+            styles::Rotation::Deg(deg) => deg.to_radians() + transform.rotation,
+            styles::Rotation::Rad(rad) => rad + transform.rotation,
+            styles::Rotation::Percent(percent) => (percent / 50.0) * std::f32::consts::PI + transform.rotation,
+            styles::Rotation::AbsDeg(deg) => deg.to_radians(),
+            styles::Rotation::AbsRad(rad) => rad,
+            styles::Rotation::AbsPercent(percent) => (percent / 50.0) * std::f32::consts::PI,
         };
         let transform = ElementTransform {
             position: Point2::new(x, y),
             scale: Point2::new(width, height),
-            rotation: rotation + transform.rotation,
+            rotation,
         };
         let color = styles.background.color;
         if let Some(texture) = &styles.background.texture {
@@ -156,6 +160,8 @@ where
                     Size::Pixel(pad) => (*pad, *pad),
                     Size::Percent(pad) => (width * (pad / 100.), height * (pad / 100.)),
                     Size::None => (0.0, 0.0),
+                    Size::AbsFill => (self.size.0 as f32, self.size.1 as f32),
+                    Size::AbsPercent(pad) => (self.size.0 as f32 * (pad / 100.), self.size.1 as f32 * (pad / 100.)),
                 };
                 let transform = ElementTransform {
                     position: Point2::new(x, y),
@@ -171,6 +177,8 @@ where
                     Size::Pixel(pad) => (*pad, *pad),
                     Size::Percent(pad) => (width * (pad / 100.), height * (pad / 100.)),
                     Size::None => (0.0, 0.0),
+                    Size::AbsFill => (self.size.0 as f32, self.size.1 as f32),
+                    Size::AbsPercent(pad) => (self.size.0 as f32 * (pad / 100.), self.size.1 as f32 * (pad / 100.)),
                 };
                 let transform = ElementTransform {
                     position: Point2::new(x, y),
@@ -197,6 +205,8 @@ where
                         Size::Percent(space) => height * (space / 100.),
                         Size::Fill => remaining_height,
                         Size::None => remaining_height / len,
+                        Size::AbsFill => self.size.1 as f32,
+                        Size::AbsPercent(space) => self.size.1 as f32 * (space / 100.),
                     };
                     let position = if transform.rotation == 0.0 {
                         Point2::new(x, y + space / 2.0)
@@ -232,6 +242,8 @@ where
                         Size::Percent(space) => width * (space / 100.),
                         Size::Fill => remaining_width,
                         Size::None => remaining_width / len,
+                        Size::AbsFill => self.size.0 as f32,
+                        Size::AbsPercent(space) => self.size.0 as f32 * (space / 100.),
                     };
                     let position = if transform.rotation == 0.0 {
                         Point2::new(x + space / 2.0, y)

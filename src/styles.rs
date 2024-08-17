@@ -107,54 +107,68 @@ impl Default for StyleSheet {
 }
 
 impl StyleSheet {
-    pub fn get_width(&self, parent_width: f32) -> f32 {
+    pub fn get_width(&self, parent_width: f32, window_width: f32) -> f32 {
         let w = match self.width {
             Size::Fill => parent_width,
             Size::Pixel(width) => width,
             Size::Percent(percent) => parent_width * (percent / 100.),
             Size::None => parent_width,
+            Size::AbsFill => window_width,
+            Size::AbsPercent(percent) => window_width * (percent / 100.),
         };
         let min = match self.min_width {
             Size::Pixel(width) => width,
             Size::Percent(percent) => parent_width * (percent / 100.),
+            Size::AbsFill => window_width,
+            Size::AbsPercent(percent) => window_width * (percent / 100.),
             _ => 0.0,
         };
         let max = match self.max_width {
             Size::Pixel(width) => width,
             Size::Percent(percent) => parent_width * (percent / 100.),
+            Size::AbsFill => window_width,
+            Size::AbsPercent(percent) => window_width * (percent / 100.),
             _ => std::f32::INFINITY,
         };
         let margin = match self.margin {
             Size::Pixel(width) => width,
             Size::Percent(percent) => parent_width * (percent / 100.),
+            Size::AbsPercent(percent) => window_width * (percent / 100.),
             _ => 0.0,
         };
-        (w - margin).max(min).min(max)
+        (w - margin).min(max).max(min)
     }
 
-    pub fn get_height(&self, parent_height: f32) -> f32 {
+    pub fn get_height(&self, parent_height: f32, window_height: f32) -> f32 {
         let h = match self.height {
             Size::Fill => parent_height,
             Size::Pixel(height) => height,
             Size::Percent(percent) => parent_height * (percent / 100.),
             Size::None => parent_height,
+            Size::AbsFill => window_height,
+            Size::AbsPercent(percent) => window_height * (percent / 100.),
         };
         let min = match self.min_height {
             Size::Pixel(height) => height,
             Size::Percent(percent) => parent_height * (percent / 100.),
+            Size::AbsFill => window_height,
+            Size::AbsPercent(percent) => window_height * (percent / 100.),
             _ => 0.0,
         };
         let max = match self.max_height {
             Size::Pixel(height) => height,
             Size::Percent(percent) => parent_height * (percent / 100.),
+            Size::AbsFill => window_height,
+            Size::AbsPercent(percent) => window_height * (percent / 100.),
             _ => std::f32::INFINITY,
         };
         let margin = match self.margin {
             Size::Pixel(height) => height,
             Size::Percent(percent) => parent_height * (percent / 100.),
+            Size::AbsPercent(percent) => window_height * (percent / 100.),
             _ => 0.0,
         };
-        (h - margin).max(min).min(max)
+        (h - margin).min(max).max(min)
     }
 
     pub fn get_x(&self, parent_x: f32, parent_width: f32, width: f32) -> f32 {
@@ -281,6 +295,8 @@ pub enum Size {
     Fill,
     Pixel(f32),
     Percent(f32),
+    AbsFill,
+    AbsPercent(f32),
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -290,9 +306,13 @@ pub enum Size {
 pub enum Rotation {
     #[default]
     None,
+    AbsNone,
     Deg(f32),
     Rad(f32),
     Percent(f32),
+    AbsDeg(f32),
+    AbsRad(f32),
+    AbsPercent(f32),
 }
 
 /// Background of the element
