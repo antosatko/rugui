@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
 use rugui::{
-    render::{Color, RadialGradient},
-    styles::{Position, Rotation, Size},
-    texture::Texture,
-    Children, Element, Gui, Spacing,
+    render::{Color, RadialGradient}, styles::{Position, Rotation, Size}, texture::Texture, Children, Element, ElementKey, Gui, Section
 };
 use winit::{application::ApplicationHandler, window};
 
@@ -27,8 +24,10 @@ impl App {
 
 struct Application {
     gui: Gui<Message>,
+    card: ElementKey,
     drawing: Drawing,
     window: Arc<winit::window::Window>,
+    t: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -54,18 +53,18 @@ impl ApplicationHandler for App {
 
         let mut rows = Element::new(&gui).with_label("Hello".to_string());
         let styles = &mut rows.styles;
-        styles.min_width = Size::Pixel(500.0);
-        styles.max_width = Size::Pixel(1600.0);
+        styles.transfomr_mut().min_width = Size::Pixel(500.0);
+        styles.transfomr_mut().max_width = Size::Pixel(1600.0);
 
         let mut row1 = Element::new(&gui).with_label("Row 1".to_string());
         let mut row2 = Element::new(&gui).with_label("Row 2".to_string());
         let mut row3 = Element::new(&gui).with_label("Row 3".to_string());
 
         let row1_styles = &mut row1.styles;
-        row1_styles.background.texture = Some(texture.clone());
-        row1_styles.position = Position::Left;
-        row1_styles.align = Position::Left;
-        row1_styles.width = Size::Pixel(200.0);
+        row1_styles.set_bg_texture(Some(texture.clone()));
+        row1_styles.transfomr_mut().position = Position::Left;
+        row1_styles.transfomr_mut().align = Position::Left;
+        row1_styles.transfomr_mut().width = Size::Pixel(200.0);
 
         let mut columns = Element::new(&gui).with_label("Columns".to_string());
         let mut column1 = Element::new(&gui).with_label("Column 1".to_string());
@@ -73,12 +72,12 @@ impl ApplicationHandler for App {
         let mut column3 = Element::new(&gui).with_label("Column 3".to_string());
 
         let column1_styles = &mut column1.styles;
-        column1_styles.background.lin_gradient = Some(Arc::new(gui.linear_gradient(
-            (Position::Top, Color::RED.with_alpha(0.3)),
-            (Position::Center, Color::TRANSPARENT),
-        )));
-        column1_styles.background.texture = Some(texture.clone());
-        column1_styles.margin = Size::Percent(-5.0);
+        column1_styles.set_bg_lin_gradient(Some(Arc::new(gui.linear_gradient(
+                            (Position::Top, Color::RED.with_alpha(0.3)),
+                            (Position::Center, Color::TRANSPARENT),
+                        ))));
+        column1_styles.set_bg_texture(Some(texture.clone()));
+        column1_styles.transfomr_mut().margin = Size::Percent(-5.0);
 
         let column2_styles = &mut column2.styles;
         // experimental radial gradient
@@ -87,72 +86,74 @@ impl ApplicationHandler for App {
             (Position::Center, Color::YELLOW),
             (Position::Top, Color::WHITE.with_alpha(0.0)),
         );
-        column2_styles.background.rad_gradient = Some(Arc::new(grad));
-        column2_styles.margin = Size::Percent(50.0);
-        column2_styles.rotation = Rotation::Deg(90.0);
+        column2_styles.set_bg_rad_gradient(Some(Arc::new(grad)));
+        column2_styles.transfomr_mut().margin = Size::Percent(50.0);
+        column2_styles.transfomr_mut().rotation = Rotation::Deg(90.0);
 
         let column3_styles = &mut column3.styles;
-        column3_styles.background.color = Color {
+        column3_styles.set_bg_color(Color {
             r: 0.5,
             g: 0.5,
             b: 0.5,
             a: 0.5,
-        };
-        column3_styles.margin = Size::Percent(5.0);
+        });
+        column3_styles.transfomr_mut().margin = Size::Percent(5.0);
 
         columns.children = Children::Columns {
             children: vec![
-                Spacing {
+                Section {
                     element: gui.add_element(column1),
-                    spacing: Size::Percent(70.0),
+                    size: Size::Percent(70.0),
                 },
-                Spacing {
+                Section {
                     element: gui.add_element(column2),
-                    spacing: Size::None,
+                    size: Size::None,
                 },
-                Spacing {
+                Section {
                     element: gui.add_element(column3),
-                    spacing: Size::None,
+                    size: Size::None,
                 },
             ],
             spacing: Size::Fill,
         };
 
         let row3_styles = &mut row3.styles;
-        row3_styles.background.color = Color {
+        row3_styles.set_bg_color(Color {
             r: 0.6,
             g: 0.0,
             b: 0.0,
             a: 0.5,
-        };
-        row3_styles.min_height = Size::Pixel(200.0);
-        row3_styles.background.texture = Some(texture.clone());
-        row3_styles.position = Position::BottomRight;
+        });
+        row3_styles.transfomr_mut().min_height = Size::Pixel(200.0);
+        row3_styles.set_bg_texture(Some(texture.clone()));
+        row3_styles.transfomr_mut().position = Position::BottomRight;
 
         let columns_styles = &mut columns.styles;
-        columns_styles.background.color = Color {
+        columns_styles.set_bg_color(Color {
             r: 0.6,
             g: 0.6,
             b: 0.6,
             a: 0.3,
-        };
-        columns_styles.rotation = Rotation::Deg(-10.0);
+        });
+        columns_styles.transfomr_mut().rotation = Rotation::Deg(-10.0);
 
         row2.children = Children::Element(gui.add_element(columns));
 
+        let card = gui.add_element(row2);
+
         rows.children = Children::Rows {
             children: vec![
-                Spacing {
+                Section {
                     element: gui.add_element(row1),
-                    spacing: Size::None,
+                    size: Size::None,
                 },
-                Spacing {
-                    element: gui.add_element(row2),
-                    spacing: Size::None,
+                Section {
+                    element: card.clone(),
+                    size: Size::None,
                 },
-                Spacing {
+                Section {
                     element: gui.add_element(row3),
-                    spacing: Size::None,
+                    size: Size::None,
                 },
             ],
             spacing: Size::Fill,
@@ -163,8 +164,10 @@ impl ApplicationHandler for App {
         window.set_visible(true);
         let this = Application {
             gui,
+            card,
             drawing,
             window,
+            t: 0.0,
         };
         *self = App::App(this);
     }
@@ -196,6 +199,10 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
+                this.gui.resize(this.drawing.size, &this.drawing.queue);
+                this.t += 1.0;
+                let card = this.gui.get_element_mut(this.card).unwrap();
+                card.styles.transfomr_mut().rotation = Rotation::Deg(this.t);
                 this.drawing.draw(&mut this.gui);
             }
             _ => {}
@@ -296,7 +303,6 @@ impl Drawing {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-
             gui.render(&mut pass);
         }
 

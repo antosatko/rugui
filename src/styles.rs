@@ -8,6 +8,33 @@ use crate::{
 };
 
 pub struct StyleSheet {
+    /// Transform of the element
+    pub(crate) transform: Transform,
+    /// Background of the element
+    ///
+    /// Each type of background can applied once
+    ///
+    /// Order of rendering:
+    /// 1. Texture
+    /// 3. LinGradient
+    /// 4. RadGradient
+    /// 2. Color
+    ///
+    /// Background is rgba(0, 0, 0, 0) by default
+    pub(crate) background: Background,
+    /// Border of the element
+    ///
+    /// Not implemented yet
+    pub(crate) border: Border,
+    /// Visibility of the element
+    ///
+    /// If false, the element and its children will not be rendered
+    pub(crate) visible: bool,
+
+    pub(crate) flags: Flags, 
+}
+
+pub struct Transform {
     /// Rotation of the element
     ///
     /// Rotation will be inherited by children
@@ -34,22 +61,6 @@ pub struct StyleSheet {
     pub max_height: Size,
     /// Minimum height of the element that the element can not go below under any circumstances
     pub min_height: Size,
-    /// Background of the element
-    ///
-    /// Each type of background can applied once
-    ///
-    /// Order of rendering:
-    /// 1. Texture
-    /// 3. LinGradient
-    /// 4. RadGradient
-    /// 2. Color
-    ///
-    /// Background is rgba(0, 0, 0, 0) by default
-    pub background: Background,
-    /// Border of the element
-    ///
-    /// Not implemented yet
-    pub border: Border,
     /// Margin of the element
     ///
     /// Margin is the space between the element and its parent
@@ -60,24 +71,47 @@ pub struct StyleSheet {
     ///
     /// Not implemented yet
     pub padding: Size,
-    /// Visibility of the element
-    ///
-    /// If false, the element and its children will not be rendered
-    pub visible: bool,
+}
+
+#[derive(Debug)]
+pub struct Flags {
+    pub(crate) dirty_color: bool,
+    pub(crate) dirty_texture: bool,
+    pub(crate) dirty_lin_gradient: bool,
+    pub(crate) dirty_rad_gradient: bool,
+    pub(crate) dirty_transform: bool,
+    pub(crate) dirty_border: bool,
+}
+
+impl Default for Flags {
+    fn default() -> Self {
+        Self {
+            dirty_color: true,
+            dirty_texture: true,
+            dirty_lin_gradient: true,
+            dirty_rad_gradient: true,
+            dirty_transform: true,
+            dirty_border: true,
+        }
+    }
 }
 
 impl Default for StyleSheet {
     fn default() -> Self {
         Self {
-            rotation: Rotation::None,
-            position: Position::Center,
-            align: Position::Center,
-            width: Size::Fill,
-            max_width: Size::None,
-            min_width: Size::None,
-            height: Size::Fill,
-            max_height: Size::None,
-            min_height: Size::None,
+            transform: Transform {
+                rotation: Rotation::None,
+                position: Position::Center,
+                align: Position::Center,
+                width: Size::Fill,
+                max_width: Size::None,
+                min_width: Size::None,
+                height: Size::Fill,
+                max_height: Size::None,
+                min_height: Size::None,
+                margin: Size::None,
+                padding: Size::None,
+            },
             background: Background {
                 color: Color::zeroed(),
                 texture: None,
@@ -99,16 +133,15 @@ impl Default for StyleSheet {
                 max_radius: Size::None,
                 visible: false,
             },
-            margin: Size::Pixel(0.0),
-            padding: Size::Pixel(0.0),
             visible: true,
+            flags: Flags::default(),
         }
     }
 }
 
 impl StyleSheet {
     pub fn get_width(&self, parent_width: f32, window_width: f32) -> f32 {
-        let w = match self.width {
+        let w = match self.transform.width {
             Size::Fill => parent_width,
             Size::Pixel(width) => width,
             Size::Percent(percent) => parent_width * (percent / 100.),
@@ -116,21 +149,21 @@ impl StyleSheet {
             Size::AbsFill => window_width,
             Size::AbsPercent(percent) => window_width * (percent / 100.),
         };
-        let min = match self.min_width {
+        let min = match self.transform.min_width {
             Size::Pixel(width) => width,
             Size::Percent(percent) => parent_width * (percent / 100.),
             Size::AbsFill => window_width,
             Size::AbsPercent(percent) => window_width * (percent / 100.),
             _ => 0.0,
         };
-        let max = match self.max_width {
+        let max = match self.transform.max_width {
             Size::Pixel(width) => width,
             Size::Percent(percent) => parent_width * (percent / 100.),
             Size::AbsFill => window_width,
             Size::AbsPercent(percent) => window_width * (percent / 100.),
             _ => std::f32::INFINITY,
         };
-        let margin = match self.margin {
+        let margin = match self.transform.margin {
             Size::Pixel(width) => width,
             Size::Percent(percent) => parent_width * (percent / 100.),
             Size::AbsPercent(percent) => window_width * (percent / 100.),
@@ -140,7 +173,7 @@ impl StyleSheet {
     }
 
     pub fn get_height(&self, parent_height: f32, window_height: f32) -> f32 {
-        let h = match self.height {
+        let h = match self.transform.height {
             Size::Fill => parent_height,
             Size::Pixel(height) => height,
             Size::Percent(percent) => parent_height * (percent / 100.),
@@ -148,21 +181,21 @@ impl StyleSheet {
             Size::AbsFill => window_height,
             Size::AbsPercent(percent) => window_height * (percent / 100.),
         };
-        let min = match self.min_height {
+        let min = match self.transform.min_height {
             Size::Pixel(height) => height,
             Size::Percent(percent) => parent_height * (percent / 100.),
             Size::AbsFill => window_height,
             Size::AbsPercent(percent) => window_height * (percent / 100.),
             _ => 0.0,
         };
-        let max = match self.max_height {
+        let max = match self.transform.max_height {
             Size::Pixel(height) => height,
             Size::Percent(percent) => parent_height * (percent / 100.),
             Size::AbsFill => window_height,
             Size::AbsPercent(percent) => window_height * (percent / 100.),
             _ => std::f32::INFINITY,
         };
-        let margin = match self.margin {
+        let margin = match self.transform.margin {
             Size::Pixel(height) => height,
             Size::Percent(percent) => parent_height * (percent / 100.),
             Size::AbsPercent(percent) => window_height * (percent / 100.),
@@ -172,7 +205,7 @@ impl StyleSheet {
     }
 
     pub fn get_x(&self, parent_x: f32, parent_width: f32, width: f32) -> f32 {
-        let x = match self.position {
+        let x = match self.transform.position {
             Position::BottomLeft | Position::Left | Position::TopLeft => {
                 parent_x - parent_width / 2.0
             }
@@ -186,7 +219,7 @@ impl StyleSheet {
                 _ => parent_x,
             },
         };
-        let align = match self.align {
+        let align = match self.transform.align {
             Position::BottomLeft | Position::Left | Position::TopLeft => width / 2.0,
             Position::Bottom | Position::Center | Position::Top => 0.0,
             Position::BottomRight | Position::Right | Position::TopRight => -width / 2.0,
@@ -201,7 +234,7 @@ impl StyleSheet {
     }
 
     pub fn get_y(&self, parent_y: f32, parent_height: f32, height: f32) -> f32 {
-        let y = match self.position {
+        let y = match self.transform.position {
             Position::TopLeft | Position::Top | Position::TopRight => parent_y - height / 2.0,
             Position::Left | Position::Center | Position::Right => parent_y,
             Position::BottomLeft | Position::Bottom | Position::BottomRight => {
@@ -213,7 +246,7 @@ impl StyleSheet {
                 _ => parent_y,
             },
         };
-        let align = match self.align {
+        let align = match self.transform.align {
             Position::TopLeft | Position::Top | Position::TopRight => height / 2.0,
             Position::Left | Position::Center | Position::Right => 0.0,
             Position::BottomLeft | Position::Bottom | Position::BottomRight => -height / 2.0,
@@ -225,6 +258,68 @@ impl StyleSheet {
         };
 
         y + align
+    }
+
+    pub fn get_transform(&self) -> &Transform {
+        &self.transform
+    }
+
+    pub fn transfomr_mut(&mut self) -> &mut Transform {
+        self.flags.dirty_transform = true;
+        &mut self.transform
+    }
+
+    pub fn get_bg_color(&self) -> Color {
+        self.background.color
+    }
+
+    pub fn set_bg_color(&mut self, color: Color) {
+        self.flags.dirty_color = true;
+        self.background.color = color;
+    }
+
+    pub fn get_bg_texture(&self) -> Option<Arc<Texture>> {
+        self.background.texture.clone()
+    }
+
+    pub fn set_bg_texture(&mut self, texture: Option<Arc<Texture>>) {
+        self.flags.dirty_texture = true;
+        self.background.texture = texture;
+    }
+
+    pub fn get_bg_lin_gradient(&self) -> Option<Arc<LinearGradient>> {
+        self.background.lin_gradient.clone()
+    }
+
+    pub fn set_bg_lin_gradient(&mut self, lin_gradient: Option<Arc<LinearGradient>>) {
+        self.flags.dirty_lin_gradient = true;
+        self.background.lin_gradient = lin_gradient;
+    }
+
+    pub fn get_bg_rad_gradient(&self) -> Option<Arc<RadialGradient>> {
+        self.background.rad_gradient.clone()
+    }
+
+    pub fn set_bg_rad_gradient(&mut self, rad_gradient: Option<Arc<RadialGradient>>) {
+        self.flags.dirty_rad_gradient = true;
+        self.background.rad_gradient = rad_gradient;
+    }
+
+    pub fn get_border(&self) -> &Border {
+        &self.border
+    }
+
+    pub fn border_mut(&mut self) -> &mut Border {
+        self.flags.dirty_border = true;
+        &mut self.border
+    }
+
+    pub fn is_visible(&self) -> bool {
+        self.visible
+    }
+
+    pub fn set_visible(&mut self, visible: bool) {
+        self.visible = visible;
     }
 }
 
@@ -316,6 +411,16 @@ pub enum Rotation {
 }
 
 /// Background of the element
+///
+/// Each type of background can applied once
+///
+/// Order of rendering:
+/// 1. Texture
+/// 3. LinGradient
+/// 4. RadGradient
+/// 2. Color
+///
+/// Background is rgba(0, 0, 0, 0) by default
 pub struct Background {
     /// Color of the element
     ///

@@ -74,7 +74,7 @@ where
                 scale: Point2::new(self.size.0 as f32, self.size.1 as f32),
                 rotation: 0.0,
             };
-            self.transform_element(key, &transform);
+            self.write_element(key, &transform);
         }
     }
 
@@ -91,6 +91,9 @@ where
     }
 
     pub fn resize(&mut self, size: (u32, u32), queue: &wgpu::Queue) {
+        for elemeent in self.elements.values_mut() {
+            elemeent.styles.flags.dirty_transform = true;
+        }
         self.size = size;
         self.gpu.resize((size.0, size.1), queue);
         let entry_key = if let Some(entry) = &self.entry {
@@ -101,7 +104,7 @@ where
         if self.debug {
             println!("Resizing window: x: {}, y: {}", size.0, size.1);
         }
-        self.transform_element(
+        self.write_element(
             *entry_key,
             &ElementTransform {
                 position: Point2::new(size.0 as f32 / 2.0, size.1 as f32 / 2.0),
@@ -111,82 +114,97 @@ where
         );
     }
 
-    fn transform_element(&mut self, key: ElementKey, transform: &ElementTransform) {
+    fn write_element(&mut self, key: ElementKey, transform: &ElementTransform) {
         let element = match self.elements.get_mut(&key) {
             Some(element) => element,
             None => return,
         };
-        let styles = &element.styles;
-        let (width, height) = (
-            styles.get_width(transform.scale.x, self.size.0 as f32),
-            styles.get_height(transform.scale.y, self.size.1 as f32),
-        );
-        let (x, y) = (
-            styles.get_x(transform.position.x, transform.scale.x, width),
-            styles.get_y(transform.position.y, transform.scale.y, height),
-        );
-        let rotation = match styles.rotation  {
-            styles::Rotation::None => transform.rotation,
-            styles::Rotation::AbsNone => 0.0,
-            styles::Rotation::Deg(deg) => deg.to_radians() + transform.rotation,
-            styles::Rotation::Rad(rad) => rad + transform.rotation,
-            styles::Rotation::Percent(percent) => (percent / 50.0) * std::f32::consts::PI + transform.rotation,
-            styles::Rotation::AbsDeg(deg) => deg.to_radians(),
-            styles::Rotation::AbsRad(rad) => rad,
-            styles::Rotation::AbsPercent(percent) => (percent / 50.0) * std::f32::consts::PI,
-        };
-        let transform = ElementTransform {
-            position: Point2::new(x, y),
-            scale: Point2::new(width, height),
-            rotation,
-        };
-        let color = styles.background.color;
-        if let Some(texture) = &styles.background.texture {
-            element.render_element.set_texture(texture.clone());
+        if element.styles.flags.dirty_transform {
+            let (width, height) = (
+                element.styles.get_width(transform.scale.x, self.size.0 as f32),
+                element.styles.get_height(transform.scale.y, self.size.1 as f32),
+            );
+            let (x, y) = (
+                element.styles.get_x(transform.position.x, transform.scale.x, width),
+                element.styles.get_y(transform.position.y, transform.scale.y, height),
+            );
+            let rotation = match element.styles.transform.rotation  {
+                styles::Rotation::None => transform.rotation,
+                styles::Rotation::AbsNone => 0.0,
+                styles::Rotation::Deg(deg) => deg.to_radians() + transform.rotation,
+                styles::Rotation::Rad(rad) => rad + transform.rotation,
+                styles::Rotation::Percent(percent) => (percent / 50.0) * std::f32::consts::PI + transform.rotation,
+                styles::Rotation::AbsDeg(deg) => deg.to_radians(),
+                styles::Rotation::AbsRad(rad) => rad,
+                styles::Rotation::AbsPercent(percent) => (percent / 50.0) * std::f32::consts::PI,
+            };
+            let transform = ElementTransform {
+                position: Point2::new(x, y),
+                scale: Point2::new(width, height),
+                rotation,
+            };
+            element.render_element.set_transform(&transform, &self.gpu.proxy);
+            element.styles.flags.dirty_transform = false;
+            element.transform = transform;
         }
-        if let Some(grad) = &styles.background.rad_gradient {
-            element.render_element.set_radial_gradient(grad.clone());
+        let transform = &element.transform;
+        if element.styles.flags.dirty_texture {
+            if let Some(texture) = &element.styles.background.texture {
+                element.render_element.set_texture(texture.clone());
+            }
+            element.styles.flags.dirty_texture = false;
         }
-        if let Some(grad) = &styles.background.lin_gradient {
-            element.render_element.set_linear_gradient(grad.clone());
+        if element.styles.flags.dirty_rad_gradient {
+            if let Some(grad) = &element.styles.background.rad_gradient {
+                element.render_element.set_radial_gradient(grad.clone());
+            }
+            element.styles.flags.dirty_rad_gradient = false;
         }
-        element.render_element.set_color(color, &self.gpu.proxy);
-        element.render_element
-            .set_transform(&transform, &self.gpu.proxy);
+        if element.styles.flags.dirty_lin_gradient {
+            if let Some(grad) = &element.styles.background.lin_gradient {
+                element.render_element.set_linear_gradient(grad.clone());
+            }
+            element.styles.flags.dirty_lin_gradient = false;
+        }
+        if element.styles.flags.dirty_color {
+            let color = element.styles.background.color;
+            element.render_element.set_color(color, &self.gpu.proxy);
+            element.styles.flags.dirty_color = false;
+        }
         match element.children.to_owned() {
             Children::Element(child) => {
-                let (pad_width, pad_height) = match &element.styles.padding {
-                    Size::Fill => (width, height),
+                let (pad_width, pad_height) = match &element.styles.transform.padding {
+                    Size::Fill => (element.transform.scale.x, element.transform.scale.y),
                     Size::Pixel(pad) => (*pad, *pad),
-                    Size::Percent(pad) => (width * (pad / 100.), height * (pad / 100.)),
+                    Size::Percent(pad) => (element.transform.scale.x * (pad / 100.), element.transform.scale.y * (pad / 100.)),
                     Size::None => (0.0, 0.0),
                     Size::AbsFill => (self.size.0 as f32, self.size.1 as f32),
                     Size::AbsPercent(pad) => (self.size.0 as f32 * (pad / 100.), self.size.1 as f32 * (pad / 100.)),
                 };
                 let transform = ElementTransform {
-                    position: Point2::new(x, y),
-                    scale: Point2::new(width - pad_width, height - pad_height),
+                    position: transform.position,
+                    scale: Point2::new(transform.scale.x - pad_width, transform.scale.y - pad_height),
                     rotation: transform.rotation,
                 };
-                self.transform_element(child.clone(), &transform);
+                self.write_element(child.clone(), &transform);
                 return;
             }
             Children::Layers(children) => {
-                let (pad_width, pad_height) = match &element.styles.padding {
-                    Size::Fill => (width, height),
+                let (pad_width, pad_height) = match &element.styles.transform.padding {
+                    Size::Fill => (element.transform.scale.x, element.transform.scale.y),
                     Size::Pixel(pad) => (*pad, *pad),
-                    Size::Percent(pad) => (width * (pad / 100.), height * (pad / 100.)),
+                    Size::Percent(pad) => (element.transform.scale.x * (pad / 100.), element.transform.scale.y * (pad / 100.)),
                     Size::None => (0.0, 0.0),
                     Size::AbsFill => (self.size.0 as f32, self.size.1 as f32),
                     Size::AbsPercent(pad) => (self.size.0 as f32 * (pad / 100.), self.size.1 as f32 * (pad / 100.)),
                 };
                 let transform = ElementTransform {
-                    position: Point2::new(x, y),
-                    scale: Point2::new(width - pad_width, height - pad_height),
+                    position: transform.position,
+                    scale: Point2::new(transform.scale.x - pad_width, transform.scale.y - pad_height),
                     rotation: transform.rotation,
                 };
                 for child in children {
-                    self.transform_element(child, &transform);
+                    self.write_element(child, &transform);
                 }
             }
             Children::Rows { children, .. } => {
@@ -194,36 +212,37 @@ where
                     return;
                 }
                 let mut len = children.len() as f32;
-                let mut remaining_height = height;
-                let mut y = y - height / 2.0;
-                for Spacing { element, spacing } in children {
+                let mut remaining_height = transform.scale.y;
+                let mut y = transform.position.y - transform.scale.y / 2.0;
+                let transform = element.transform.clone();
+                for Section { element, size: spacing } in children {
                     if remaining_height <= 0.0 {
                         break;
                     }
                     let space = match spacing {
                         Size::Pixel(space) => space,
-                        Size::Percent(space) => height * (space / 100.),
+                        Size::Percent(space) => transform.scale.y * (space / 100.),
                         Size::Fill => remaining_height,
                         Size::None => remaining_height / len,
                         Size::AbsFill => self.size.1 as f32,
                         Size::AbsPercent(space) => self.size.1 as f32 * (space / 100.),
                     };
                     let position = if transform.rotation == 0.0 {
-                        Point2::new(x, y + space / 2.0)
+                        Point2::new(transform.position.x, y + space / 2.0)
                     } else {
                         let pivot = transform.position;
-                        let point = Point2::new(x, y + space / 2.0);
+                        let point = Point2::new(transform.position.x, y + space / 2.0);
                         rotate_point(point, pivot, transform.rotation)
                     };
                     let transform = ElementTransform {
                         position,
-                        scale: Point2::new(width, space),
+                        scale: Point2::new(transform.scale.x, space),
                         rotation: transform.rotation,
                     };
-                    self.transform_element(element, &transform);
                     y += space;
                     remaining_height -= space;
                     len -= 1.0;
+                    self.write_element(element, &transform);
                 }
             }
             Children::Columns { children, .. } => {
@@ -231,33 +250,34 @@ where
                     return;
                 }
                 let mut len = children.len() as f32;
-                let mut remaining_width = width;
-                let mut x = x - width / 2.0;
-                for Spacing { element, spacing } in children {
+                let mut remaining_width = transform.scale.x;
+                let mut x = transform.position.x - transform.scale.x / 2.0;
+                let transform = element.transform.clone();
+                for Section { element, size: spacing } in children {
                     if remaining_width <= 0.0 {
                         break;
                     }
                     let space = match spacing {
                         Size::Pixel(space) => space,
-                        Size::Percent(space) => width * (space / 100.),
+                        Size::Percent(space) => transform.scale.x * (space / 100.),
                         Size::Fill => remaining_width,
                         Size::None => remaining_width / len,
                         Size::AbsFill => self.size.0 as f32,
                         Size::AbsPercent(space) => self.size.0 as f32 * (space / 100.),
                     };
                     let position = if transform.rotation == 0.0 {
-                        Point2::new(x + space / 2.0, y)
+                        Point2::new(x + space / 2.0, transform.position.y)
                     } else {
                         let pivot = transform.position;
-                        let point = Point2::new(x + space / 2.0, y);
+                        let point = Point2::new(x + space / 2.0, transform.position.y);
                         rotate_point(point, pivot, transform.rotation)
                     };
                     let transform = ElementTransform {
                         position,
-                        scale: Point2::new(space, height),
+                        scale: Point2::new(space, transform.scale.y),
                         rotation: transform.rotation,
                     };
-                    self.transform_element(element, &transform);
+                    self.write_element(element, &transform);
                     x += space;
                     remaining_width -= space;
                     len -= 1.0;
@@ -385,6 +405,7 @@ where
     pub styles: StyleSheet,
     pub event_listeners: HashMap<EventTypes, Msg>,
     pub children: Children,
+    transform: ElementTransform,
 }
 
 impl<Msg> Element<Msg>
@@ -398,6 +419,11 @@ where
             styles: StyleSheet::default(),
             event_listeners: HashMap::new(),
             children: Children::None,
+            transform: ElementTransform {
+                position: Point2::new(0.0, 0.0),
+                scale: Point2::new(0.0, 0.0),
+                rotation: 0.0,
+            },
         }
     }
 
@@ -427,11 +453,11 @@ pub enum Children {
     Element(ElementKey),
     Layers(Vec<ElementKey>),
     Rows {
-        children: Vec<Spacing>,
+        children: Vec<Section>,
         spacing: Size,
     },
     Columns {
-        children: Vec<Spacing>,
+        children: Vec<Section>,
         spacing: Size,
     },
 
@@ -439,9 +465,9 @@ pub enum Children {
 }
 
 #[derive(Clone, Debug)]
-pub struct Spacing {
+pub struct Section {
     pub element: ElementKey,
-    pub spacing: Size,
+    pub size: Size,
 }
 
 
