@@ -9,3 +9,4 @@ winit = "0.30.5"
 rugui = { path = ".." }
 pollster = "0.3.0"
 image = "0.25.2"
+rugui-winit-events = { path = "../rugui-winit-events" }

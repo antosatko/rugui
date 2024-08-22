@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use rugui::{
-    render::{Color, RadialGradient}, styles::{Position, Rotation, Size}, texture::Texture, Children, Element, ElementKey, Gui, Section
+    render::{Color, RadialGradient},
+    styles::{Position, Rotation, Size},
+    texture::Texture,
+    Children, Element, ElementKey, Gui, Section,
 };
 use winit::{application::ApplicationHandler, window};
 
@@ -28,10 +31,16 @@ struct Application {
     drawing: Drawing,
     window: Arc<winit::window::Window>,
     t: f32,
+    start: std::time::Instant,
+    events: rugui_winit_events::State,
+    rotation: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum Message {}
+pub enum Message {
+    Idk,
+    Card,
+}
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
@@ -51,14 +60,14 @@ impl ApplicationHandler for App {
 
         let texture = gui.texture_from_bytes(include_bytes!("they.webp"), "sdf");
 
-        let mut rows = Element::new(&gui).with_label("Hello".to_string());
+        let mut rows = Element::new(&gui).with_label("Hello");
         let styles = &mut rows.styles;
         styles.transfomr_mut().min_width = Size::Pixel(500.0);
         styles.transfomr_mut().max_width = Size::Pixel(1600.0);
 
-        let mut row1 = Element::new(&gui).with_label("Row 1".to_string());
-        let mut row2 = Element::new(&gui).with_label("Row 2".to_string());
-        let mut row3 = Element::new(&gui).with_label("Row 3".to_string());
+        let mut row1 = Element::new(&gui).with_label("Row 1");
+        let mut row2 = Element::new(&gui).with_label("Row 2");
+        let mut row3 = Element::new(&gui).with_label("Row 3");
 
         let row1_styles = &mut row1.styles;
         row1_styles.set_bg_texture(Some(texture.clone()));
@@ -66,20 +75,28 @@ impl ApplicationHandler for App {
         row1_styles.transfomr_mut().align = Position::Left;
         row1_styles.transfomr_mut().width = Size::Pixel(200.0);
 
-        let mut columns = Element::new(&gui).with_label("Columns".to_string());
-        let mut column1 = Element::new(&gui).with_label("Column 1".to_string());
-        let mut column2 = Element::new(&gui).with_label("Column 2".to_string());
-        let mut column3 = Element::new(&gui).with_label("Column 3".to_string());
+        let mut columns = Element::new(&gui).with_label("Columns");
+        columns
+            .event_listeners
+            .insert(rugui::events::EventTypes::MouseEnter, Message::Card);
+        columns
+            .event_listeners
+            .insert(rugui::events::EventTypes::MouseLeave, Message::Card);
+        let mut column1 = Element::new(&gui).with_label("Column 1");
+        let mut column2 = Element::new(&gui).with_label("Column 2");
+        let mut column3 = Element::new(&gui).with_label("Column 3");
 
         let column1_styles = &mut column1.styles;
+        column1_styles.transfomr_mut().rotation = Rotation::None;
         column1_styles.set_bg_lin_gradient(Some(Arc::new(gui.linear_gradient(
-                            (Position::Top, Color::RED.with_alpha(0.3)),
-                            (Position::Center, Color::TRANSPARENT),
-                        ))));
+            (Position::Top, Color::RED.with_alpha(0.3)),
+            (Position::Center, Color::TRANSPARENT),
+        ))));
         column1_styles.set_bg_texture(Some(texture.clone()));
         column1_styles.transfomr_mut().margin = Size::Percent(-5.0);
 
         let column2_styles = &mut column2.styles;
+        column2_styles.transfomr_mut().rotation = Rotation::None;
         // experimental radial gradient
         // this is a subject to change
         let grad = gui.radial_gradient(
@@ -88,9 +105,9 @@ impl ApplicationHandler for App {
         );
         column2_styles.set_bg_rad_gradient(Some(Arc::new(grad)));
         column2_styles.transfomr_mut().margin = Size::Percent(50.0);
-        column2_styles.transfomr_mut().rotation = Rotation::Deg(90.0);
 
         let column3_styles = &mut column3.styles;
+        column3_styles.transfomr_mut().rotation = Rotation::None;
         column3_styles.set_bg_color(Color {
             r: 0.5,
             g: 0.5,
@@ -135,11 +152,12 @@ impl ApplicationHandler for App {
             b: 0.6,
             a: 0.3,
         });
-        columns_styles.transfomr_mut().rotation = Rotation::Deg(-10.0);
+        columns_styles.transfomr_mut().rotation = Rotation::None;
 
-        row2.children = Children::Element(gui.add_element(columns));
+        let card = gui.add_element(columns);
+        row2.children = Children::Element(card);
 
-        let card = gui.add_element(row2);
+        gui.add_element(row2);
 
         rows.children = Children::Rows {
             children: vec![
@@ -168,6 +186,9 @@ impl ApplicationHandler for App {
             drawing,
             window,
             t: 0.0,
+            start: std::time::Instant::now(),
+            events: rugui_winit_events::State::new(),
+            rotation: false,
         };
         *self = App::App(this);
     }
@@ -182,6 +203,28 @@ impl ApplicationHandler for App {
             App::App(this) => this,
             App::Loading => return,
         };
+
+        match this.events.event(&event) {
+            Some(event) => {
+                this.gui.event(event);
+            }
+            None => (),
+        }
+
+        while let Some(event) = this.gui.poll_event() {
+            match event.msg {
+                Message::Card => match event.event_type {
+                    rugui::events::EventTypes::MouseEnter => {
+                        this.rotation = false;
+                    }
+                    rugui::events::EventTypes::MouseLeave => {
+                        this.rotation = true;
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
 
         match event {
             winit::event::WindowEvent::Resized(size) => {
@@ -199,10 +242,12 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
-                this.gui.resize(this.drawing.size, &this.drawing.queue);
-                this.t += 1.0;
                 let card = this.gui.get_element_mut(this.card).unwrap();
-                card.styles.transfomr_mut().rotation = Rotation::Deg(this.t);
+                if this.rotation {
+                    this.t += 0.1;
+                    card.styles.transfomr_mut().rotation = Rotation::Deg(this.t);
+                }
+                this.gui.resize(this.drawing.size, &this.drawing.queue);
                 this.drawing.draw(&mut this.gui);
             }
             _ => {}

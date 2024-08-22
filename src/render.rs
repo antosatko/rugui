@@ -795,7 +795,9 @@ impl RenderColor {
             mapped_at_creation: false,
         });
 
-        let bind_group_layout = proxy.device.create_bind_group_layout(&Self::BIND_GROUP_LAYOUT);
+        let bind_group_layout = proxy
+            .device
+            .create_bind_group_layout(&Self::BIND_GROUP_LAYOUT);
 
         let bind_group = proxy.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Render Color Bind Group"),
@@ -1055,7 +1057,11 @@ impl RenderElement {
     }
 
     pub fn render(&self, pipelines: &Pipelines, pass: &mut wgpu::RenderPass) {
-        if self.color.is_none() && self.texture.is_none() && self.radial_gradient.is_none() && self.linear_gradient.is_none() {
+        if self.color.is_none()
+            && self.texture.is_none()
+            && self.radial_gradient.is_none()
+            && self.linear_gradient.is_none()
+        {
             return;
         } else {
             pass.set_bind_group(1, self.bind(), &[]);
@@ -1064,17 +1070,29 @@ impl RenderElement {
             Self::draw_command(&pipelines.texture_pipeline, pass, &texture.bind_group);
         }
         if let Some(radial_gradient) = &self.radial_gradient {
-            Self::draw_command(&pipelines.radial_gradient_pipeline, pass, &radial_gradient.bind_group);
+            Self::draw_command(
+                &pipelines.radial_gradient_pipeline,
+                pass,
+                &radial_gradient.bind_group,
+            );
         }
         if let Some(linear_gradient) = &self.linear_gradient {
-            Self::draw_command(&pipelines.linear_gradient_pipeline, pass, &linear_gradient.bind_group);
+            Self::draw_command(
+                &pipelines.linear_gradient_pipeline,
+                pass,
+                &linear_gradient.bind_group,
+            );
         }
         if let Some(render_color) = &self.color {
             Self::draw_command(&pipelines.color_pipeline, pass, render_color.bind());
         }
     }
 
-    fn draw_command(pipeline: &wgpu::RenderPipeline, pass: &mut wgpu::RenderPass, bind_group: &wgpu::BindGroup) {
+    fn draw_command(
+        pipeline: &wgpu::RenderPipeline,
+        pass: &mut wgpu::RenderPass,
+        bind_group: &wgpu::BindGroup,
+    ) {
         pass.set_pipeline(pipeline);
         pass.set_bind_group(2, bind_group, &[]);
         pass.draw(0..6, 0..1);

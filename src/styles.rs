@@ -34,6 +34,7 @@ pub struct StyleSheet {
     pub(crate) flags: Flags, 
 }
 
+#[derive(Debug)]
 pub struct Transform {
     /// Rotation of the element
     ///
@@ -324,6 +325,7 @@ impl StyleSheet {
 }
 
 /// Position of the element relative to its parent
+#[derive(Debug)]
 pub enum Position {
     Top,
     TopLeft,

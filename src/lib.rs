@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use events::{EventResponse, EventTypes};
+use events::{EventPoll, EventResponse, EventTypes, WindowEvent};
 use nalgebra::Point2;
 use render::{Color, GpuBound, LinearGradient, RadialGradient, RenderElement};
 use styles::{Position, Size, StyleSheet};
@@ -15,11 +15,27 @@ where
     Msg: Clone,
 {
     elements: HashMap<ElementKey, Element<Msg>>,
+    events: EventPoll<Msg>,
     entry: Option<ElementKey>,
     last_key: u64,
     size: (u32, u32),
     gpu: GpuBound,
+    input: InputState,
     pub debug: bool,
+}
+
+struct InputState {
+    mouse: Point2<f32>,
+    prev_mouse: Point2<f32>,
+}
+
+impl InputState {
+    pub fn new() -> Self {
+        Self {
+            mouse: Point2::new(0.0, 0.0),
+            prev_mouse: Point2::new(0.0, 0.0),
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
@@ -35,13 +51,19 @@ where
         let gpu = GpuBound::new(queue, device, size);
         let this = Self {
             elements: HashMap::new(),
+            events: EventPoll { events: Vec::new(), queue: Vec::new() },
             last_key: 0,
             entry: None,
             size,
             gpu,
+            input: InputState::new(),
             debug: false,
         };
         this
+    }
+
+    pub fn poll_event(&mut self) -> Option<events::Event<Msg>> {
+        self.events.events.pop()
     }
 
     pub fn add_element(&mut self, element: Element<Msg>) -> ElementKey {
@@ -78,21 +100,240 @@ where
         }
     }
 
-    pub fn event(&mut self, event: events::Event) -> EventResponse<Msg> {
-        let entry_key = match &self.entry {
-            Some(entry) => entry,
-            None => return EventResponse::Ignored,
+    pub fn event(&mut self, event: events::WindowEvent) {
+        self.events.queue.push(event);
+    }
+
+    fn resolve_events(&mut self) {
+        let entry_key = if let Some(entry) = self.entry {
+            entry
+        } else {
+            return;
         };
-        let element = match self.elements.get(entry_key) {
+        while let Some(event) = self.events.queue.pop() {
+            match &event {
+                WindowEvent::MouseMove { position } => {
+                    self.input.prev_mouse = self.input.mouse;
+                    self.input.mouse = *position;
+                }
+                _ => {}
+            }
+            self.element_event(entry_key, &event);
+        }
+    }
+
+    fn element_event(&mut self, key: ElementKey, event: &events::WindowEvent) -> EventResponse {
+        // propagate event to children
+        let element = match self.elements.get_mut(&key) {
             Some(element) => element,
             None => return EventResponse::Ignored,
         };
-        todo!("Handle the event")
+        if !element.styles.visible {
+            return EventResponse::Ignored;
+        }
+        let mut response = EventResponse::Ignored;
+        match element.children.to_owned() {
+            Children::Element(child) => {
+                response = self.element_event(child, event);
+            }
+            Children::Layers(children) => {
+                for child in children {
+                    response = self.element_event(child, event);
+                    if response == EventResponse::Consumed {
+                        break;
+                    }
+                }
+            }
+            Children::Rows { children, .. } => {
+                for child in children {
+                    response = self.element_event(child.element, event);
+                    if response == EventResponse::Consumed {
+                        break;
+                    }
+                }
+            }
+            Children::Columns { children, .. } => {
+                for child in children {
+                    response = self.element_event(child.element, event);
+                    if response == EventResponse::Consumed {
+                        break;
+                    }
+                }
+            }
+            Children::None => {}
+        }
+        if response == EventResponse::Consumed {
+            return response;
+        }
+        let element = match self.elements.get_mut(&key) {
+            Some(element) => element,
+            None => return EventResponse::Ignored,
+        };
+        match event {
+            events::WindowEvent::MouseDown { button } => {
+                let position = self.input.mouse;
+                if element.transform.point_collision(position) {
+                    if let Some(msg) = element.event_listeners.get(&EventTypes::MouseDown) {
+                        self.events.events.push(events::Event {
+                            event_type: EventTypes::MouseDown,
+                            event: event.clone(),
+                            msg: msg.clone(),
+                            key,
+                        });
+                    }
+                }
+            }
+            events::WindowEvent::MouseUp { button } => {
+                let position = self.input.mouse;
+                if element.transform.point_collision(position) {
+                    if let Some(msg) = element.event_listeners.get(&EventTypes::MouseUp) {
+                        self.events.events.push(events::Event {
+                            event_type: EventTypes::MouseUp,
+                            event: event.clone(),
+                            msg: msg.clone(),
+                            key,
+                        });
+                    }
+                }
+            }
+            events::WindowEvent::Scroll { delta } => {
+                let position = self.input.mouse;
+                if element.transform.point_collision(position) {
+                    if let Some(msg) = element.event_listeners.get(&EventTypes::Scroll) {
+                        todo!();
+                    }
+                }
+            }
+            WindowEvent::Input { text } => {
+                if let Some(msg) = element.event_listeners.get(&EventTypes::Input) {
+                    todo!();
+                }
+            }
+            WindowEvent::SelectNext => {
+                if let Some(msg) = element.event_listeners.get(&EventTypes::SelectNext) {
+                    self.events.events.push(events::Event {
+                        event_type: EventTypes::SelectNext,
+                        event: event.clone(),
+                        msg: msg.clone(),
+                        key,
+                    });
+                }
+            }
+            WindowEvent::SelectPrevious => {
+                if let Some(msg) = element.event_listeners.get(&EventTypes::SelectPrevious) {
+                    self.events.events.push(events::Event {
+                        event_type: EventTypes::SelectPrevious,
+                        event: event.clone(),
+                        msg: msg.clone(),
+                        key,
+                    });
+                }
+            }
+            events::WindowEvent::MouseMove { .. } => {
+                let position = self.input.mouse;
+                let prev = self.input.prev_mouse;
+                let (this, prev) = (element.transform.point_collision(position), element.transform.point_collision(prev));
+                match (this, prev) {
+                    (true, false) => {
+                        if let Some(msg) = element.event_listeners.get(&EventTypes::MouseEnter) {
+                            self.events.events.push(events::Event {
+                                event_type: EventTypes::MouseEnter,
+                                event: event.clone(),
+                                msg: msg.clone(),
+                                key,
+                            });
+                        }
+                    }
+                    (false, true) => {
+                        if let Some(msg) = element.event_listeners.get(&EventTypes::MouseLeave) {
+                            self.events.events.push(events::Event {
+                                event_type: EventTypes::MouseLeave,
+                                event: event.clone(),
+                                msg: msg.clone(),
+                                key,
+                            });
+                        }
+                    }
+                    _ => {}
+                }
+                if this {
+                    if let Some(msg) = element.event_listeners.get(&EventTypes::MouseMove) {
+                        self.events.events.push(events::Event {
+                            event_type: EventTypes::MouseMove,
+                            event: event.clone(),
+                            msg: msg.clone(),
+                            key,
+                        });
+                    }
+                }
+            }
+            _ => {}
+        };
+        EventResponse::Ignored
+    }
+
+    fn traverse_elements(&self, key: ElementKey, f: &mut dyn FnMut(&Element<Msg>)) {
+        let element = match self.elements.get(&key) {
+            Some(element) => element,
+            None => return,
+        };
+        f(element);
+        match element.children.to_owned() {
+            Children::Element(child) => {
+                self.traverse_elements(child, f);
+            }
+            Children::Layers(children) => {
+                for child in children {
+                    self.traverse_elements(child, f);
+                }
+            }
+            Children::Rows { children, .. } => {
+                for child in children {
+                    self.traverse_elements(child.element, f);
+                }
+            }
+            Children::Columns { children, .. } => {
+                for child in children {
+                    self.traverse_elements(child.element, f);
+                }
+            }
+            Children::None => return,
+        }
+    }
+
+    fn traverse_elements_mut(&mut self, key: ElementKey, f: &mut dyn FnMut(&mut Element<Msg>)) {
+        let element = match self.elements.get_mut(&key) {
+            Some(element) => element,
+            None => return,
+        };
+        f(element);
+        match element.children.to_owned() {
+            Children::Element(child) => {
+                self.traverse_elements_mut(child, f);
+            }
+            Children::Layers(children) => {
+                for child in children {
+                    self.traverse_elements_mut(child, f);
+                }
+            }
+            Children::Rows { children, .. } => {
+                for child in children {
+                    self.traverse_elements_mut(child.element, f);
+                }
+            }
+            Children::Columns { children, .. } => {
+                for child in children {
+                    self.traverse_elements_mut(child.element, f);
+                }
+            }
+            Children::None => return,
+        }
     }
 
     pub fn resize(&mut self, size: (u32, u32), queue: &wgpu::Queue) {
-        for elemeent in self.elements.values_mut() {
-            elemeent.styles.flags.dirty_transform = true;
+        self.resolve_events();
+        for element in self.elements.values_mut() {
+            element.styles.flags.dirty_transform = true;
         }
         self.size = size;
         self.gpu.resize((size.0, size.1), queue);
@@ -101,9 +342,6 @@ where
         } else {
             return;
         };
-        if self.debug {
-            println!("Resizing window: x: {}, y: {}", size.0, size.1);
-        }
         self.write_element(
             *entry_key,
             &ElementTransform {
@@ -115,25 +353,38 @@ where
     }
 
     fn write_element(&mut self, key: ElementKey, transform: &ElementTransform) {
-        let element = match self.elements.get_mut(&key) {
-            Some(element) => element,
-            None => return,
-        };
-        if element.styles.flags.dirty_transform {
+        if true {
+            self.traverse_elements_mut(key, &mut |element| {
+                element.styles.flags.dirty_transform = true;
+            });
+            let element = match self.elements.get_mut(&key) {
+                Some(element) => element,
+                None => return,
+            };
             let (width, height) = (
-                element.styles.get_width(transform.scale.x, self.size.0 as f32),
-                element.styles.get_height(transform.scale.y, self.size.1 as f32),
+                element
+                    .styles
+                    .get_width(transform.scale.x, self.size.0 as f32),
+                element
+                    .styles
+                    .get_height(transform.scale.y, self.size.1 as f32),
             );
             let (x, y) = (
-                element.styles.get_x(transform.position.x, transform.scale.x, width),
-                element.styles.get_y(transform.position.y, transform.scale.y, height),
+                element
+                    .styles
+                    .get_x(transform.position.x, transform.scale.x, width),
+                element
+                    .styles
+                    .get_y(transform.position.y, transform.scale.y, height),
             );
-            let rotation = match element.styles.transform.rotation  {
+            let rotation = match element.styles.transform.rotation {
                 styles::Rotation::None => transform.rotation,
                 styles::Rotation::AbsNone => 0.0,
                 styles::Rotation::Deg(deg) => deg.to_radians() + transform.rotation,
                 styles::Rotation::Rad(rad) => rad + transform.rotation,
-                styles::Rotation::Percent(percent) => (percent / 50.0) * std::f32::consts::PI + transform.rotation,
+                styles::Rotation::Percent(percent) => {
+                    (percent / 50.0) * std::f32::consts::PI + transform.rotation
+                }
                 styles::Rotation::AbsDeg(deg) => deg.to_radians(),
                 styles::Rotation::AbsRad(rad) => rad,
                 styles::Rotation::AbsPercent(percent) => (percent / 50.0) * std::f32::consts::PI,
@@ -143,10 +394,44 @@ where
                 scale: Point2::new(width, height),
                 rotation,
             };
-            element.render_element.set_transform(&transform, &self.gpu.proxy);
-            element.styles.flags.dirty_transform = false;
+            let pre_collision = element.transform.point_collision(self.input.mouse);
+
+            element
+            .render_element
+            .set_transform(&transform, &self.gpu.proxy);
             element.transform = transform;
+            element.styles.flags.dirty_transform = false;
+
+            let post_collision = element.transform.point_collision(self.input.mouse);
+            match (pre_collision, post_collision) {
+                (true, false) => {
+                    if let Some(msg) = element.event_listeners.get(&EventTypes::MouseLeave) {
+                        self.events.events.push(events::Event {
+                            event_type: EventTypes::MouseLeave,
+                            event: WindowEvent::MouseMove { position: self.input.mouse },
+                            msg: msg.clone(),
+                            key,
+                        });
+                    }
+                }
+                (false, true) => {
+                    if let Some(msg) = element.event_listeners.get(&EventTypes::MouseEnter) {
+                        self.events.events.push(events::Event {
+                            event_type: EventTypes::MouseEnter,
+                            event: WindowEvent::MouseMove { position: self.input.mouse },
+                            msg: msg.clone(),
+                            key,
+                        });
+                    }
+                }
+                _ => {}
+            }
         }
+        let element = match self.elements.get_mut(&key) {
+            Some(element) => element,
+            None => return,
+        };
+        element.parent = transform.clone();
         let transform = &element.transform;
         if element.styles.flags.dirty_texture {
             if let Some(texture) = &element.styles.background.texture {
@@ -176,15 +461,23 @@ where
                 let (pad_width, pad_height) = match &element.styles.transform.padding {
                     Size::Fill => (element.transform.scale.x, element.transform.scale.y),
                     Size::Pixel(pad) => (*pad, *pad),
-                    Size::Percent(pad) => (element.transform.scale.x * (pad / 100.), element.transform.scale.y * (pad / 100.)),
+                    Size::Percent(pad) => (
+                        element.transform.scale.x * (pad / 100.),
+                        element.transform.scale.y * (pad / 100.),
+                    ),
                     Size::None => (0.0, 0.0),
                     Size::AbsFill => (self.size.0 as f32, self.size.1 as f32),
-                    Size::AbsPercent(pad) => (self.size.0 as f32 * (pad / 100.), self.size.1 as f32 * (pad / 100.)),
+                    Size::AbsPercent(pad) => (
+                        self.size.0 as f32 * (pad / 100.),
+                        self.size.1 as f32 * (pad / 100.),
+                    ),
                 };
                 let transform = ElementTransform {
-                    position: transform.position,
-                    scale: Point2::new(transform.scale.x - pad_width, transform.scale.y - pad_height),
-                    rotation: transform.rotation,
+                    scale: Point2::new(
+                        transform.scale.x - pad_width,
+                        transform.scale.y - pad_height,
+                    ),
+                    ..transform.clone()
                 };
                 self.write_element(child.clone(), &transform);
                 return;
@@ -193,15 +486,23 @@ where
                 let (pad_width, pad_height) = match &element.styles.transform.padding {
                     Size::Fill => (element.transform.scale.x, element.transform.scale.y),
                     Size::Pixel(pad) => (*pad, *pad),
-                    Size::Percent(pad) => (element.transform.scale.x * (pad / 100.), element.transform.scale.y * (pad / 100.)),
+                    Size::Percent(pad) => (
+                        element.transform.scale.x * (pad / 100.),
+                        element.transform.scale.y * (pad / 100.),
+                    ),
                     Size::None => (0.0, 0.0),
                     Size::AbsFill => (self.size.0 as f32, self.size.1 as f32),
-                    Size::AbsPercent(pad) => (self.size.0 as f32 * (pad / 100.), self.size.1 as f32 * (pad / 100.)),
+                    Size::AbsPercent(pad) => (
+                        self.size.0 as f32 * (pad / 100.),
+                        self.size.1 as f32 * (pad / 100.),
+                    ),
                 };
                 let transform = ElementTransform {
-                    position: transform.position,
-                    scale: Point2::new(transform.scale.x - pad_width, transform.scale.y - pad_height),
-                    rotation: transform.rotation,
+                    scale: Point2::new(
+                        transform.scale.x - pad_width,
+                        transform.scale.y - pad_height,
+                    ),
+                    ..transform.clone()
                 };
                 for child in children {
                     self.write_element(child, &transform);
@@ -215,7 +516,11 @@ where
                 let mut remaining_height = transform.scale.y;
                 let mut y = transform.position.y - transform.scale.y / 2.0;
                 let transform = element.transform.clone();
-                for Section { element, size: spacing } in children {
+                for Section {
+                    element,
+                    size: spacing,
+                } in children
+                {
                     if remaining_height <= 0.0 {
                         break;
                     }
@@ -253,7 +558,11 @@ where
                 let mut remaining_width = transform.scale.x;
                 let mut x = transform.position.x - transform.scale.x / 2.0;
                 let transform = element.transform.clone();
-                for Section { element, size: spacing } in children {
+                for Section {
+                    element,
+                    size: spacing,
+                } in children
+                {
                     if remaining_width <= 0.0 {
                         break;
                     }
@@ -309,7 +618,9 @@ where
         if !element.styles.visible {
             return;
         }
-        element.render_element.render(&self.gpu.proxy.pipelines, pass);
+        element
+            .render_element
+            .render(&self.gpu.proxy.pipelines, pass);
         match element.children.to_owned() {
             Children::Element(child) => {
                 self.render_element(child, pass);
@@ -396,6 +707,39 @@ pub struct ElementTransform {
     pub rotation: f32,
 }
 
+impl ElementTransform {
+    pub fn new(position: Point2<f32>, scale: Point2<f32>, rotation: f32) -> Self {
+        Self {
+            position,
+            scale,
+            rotation,
+        }
+    }
+
+    pub fn zeroed() -> Self {
+        Self {
+            position: Point2::new(0.0, 0.0),
+            scale: Point2::new(0.0, 0.0),
+            rotation: 0.0,
+        }
+    }
+
+    pub fn point_collision(&self, point: Point2<f32>) -> bool {
+        let point_rotated = rotate_point(point, self.position, -self.rotation);
+        let width = self.scale.x / 2.0;
+        let height = self.scale.y / 2.0;
+        let x = self.position.x - width;
+        let y = self.position.y - height;
+        let x_max = self.position.x + width;
+        let y_max = self.position.y + height;
+
+        point_rotated.x >= x
+            && point_rotated.x <= x_max
+            && point_rotated.y >= y
+            && point_rotated.y <= y_max
+    }
+}
+
 pub struct Element<Msg>
 where
     Msg: Clone,
@@ -406,6 +750,7 @@ where
     pub event_listeners: HashMap<EventTypes, Msg>,
     pub children: Children,
     transform: ElementTransform,
+    parent: ElementTransform,
 }
 
 impl<Msg> Element<Msg>
@@ -419,16 +764,13 @@ where
             styles: StyleSheet::default(),
             event_listeners: HashMap::new(),
             children: Children::None,
-            transform: ElementTransform {
-                position: Point2::new(0.0, 0.0),
-                scale: Point2::new(0.0, 0.0),
-                rotation: 0.0,
-            },
+            transform: ElementTransform::zeroed(),
+            parent: ElementTransform::zeroed(),
         }
     }
 
-    pub fn with_label(mut self, label: String) -> Self {
-        self.label = Some(label);
+    pub fn with_label(mut self, label: &str) -> Self {
+        self.label = Some(label.to_string());
         self
     }
 
@@ -469,7 +811,6 @@ pub struct Section {
     pub element: ElementKey,
     pub size: Size,
 }
-
 
 fn rotate_point(point: Point2<f32>, pivot: Point2<f32>, angle: f32) -> Point2<f32> {
     let sin = angle.sin();

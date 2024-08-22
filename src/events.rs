@@ -2,6 +2,7 @@ use nalgebra::{Point2, Vector2};
 
 use crate::ElementKey;
 
+#[derive(Debug, Clone)]
 pub enum MouseButton {
     Left,
     Right,
@@ -9,32 +10,26 @@ pub enum MouseButton {
 }
 
 /// Events that can be triggered by the user
-pub enum Event<'a> {
+#[derive(Debug, Clone)]
+pub enum WindowEvent {
     /// A mouse button was clicked
     MouseDown {
         button: MouseButton,
-        position: Point2<f32>,
     },
     /// A mouse button was released
     MouseUp {
         button: MouseButton,
-        position: Point2<f32>,
     },
     /// The mouse was moved
     MouseMove {
         position: Point2<f32>,
-        delta: Vector2<f32>,
     },
     /// The mouse wheel was scrolled
-    Scroll { delta: f32, position: Point2<f32> },
+    Scroll { delta:  Point2<f32> },
     /// Logical key press
     ///
     /// This event considers the current keyboard layout and modifiers
-    Input { text: &'a str },
-    /// Physical key press
-    ///
-    /// This event fires when a key is pressed on the keyboard
-    Key { code: u32 },
+    Input { text: String },
     /// Select the next element
     SelectNext,
     /// Select the previous element
@@ -50,51 +45,37 @@ pub enum EventTypes {
     MouseDown,
     MouseUp,
     MouseMove,
+    MouseEnter,
+    MouseLeave,
     Scroll,
     Input,
     SelectNext,
     SelectPrevious,
-    Focus,
-    Blur,
 }
 
 /// Element response to an event
-#[derive(Debug, Clone)]
-pub enum EventResponse<Msg>
-where
-    Msg: Clone,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventResponse
 {
     Consumed,
     Ignored,
-    Message(UserEvent<Msg>),
 }
 
-pub struct UserEvents<Msg>
+pub struct EventPoll<Msg>
 where
     Msg: Clone,
 {
-    pub events: Vec<UserEvent<Msg>>,
+    pub queue: Vec<WindowEvent>,
+    pub events: Vec<Event<Msg>>,
 }
 
 #[derive(Clone, Debug)]
-pub struct UserEvent<Msg>
+pub struct Event<Msg>
 where
     Msg: Clone,
 {
-    pub listener: EventListeners,
+    pub event_type: EventTypes,
+    pub event: WindowEvent,
     pub msg: Msg,
     pub key: ElementKey,
-}
-
-#[derive(Clone, Debug)]
-pub enum EventListeners {
-    MouseDown,
-    MouseUp,
-    MouseMove,
-    Scroll,
-    Input,
-    SelectNext,
-    SelectPrevious,
-    MouseEnter,
-    MouseLeave,
 }
