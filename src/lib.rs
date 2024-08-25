@@ -51,7 +51,7 @@ impl<Msg> Gui<Msg>
 where
     Msg: Clone,
 {
-    pub fn new(size: (u32, u32), device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>) -> Self {
+    pub fn new(size: (u32, u32), device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         let gpu = GpuBound::new(queue, device, size);
         let this = Self {
             elements: HashMap::new(),

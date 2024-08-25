@@ -56,7 +56,7 @@ impl ApplicationHandler for App {
         );
         let drawing = pollster::block_on(Drawing::new(window.clone()));
         let mut gui: Gui<Message> =
-            Gui::new((800, 600), drawing.device.clone(), drawing.queue.clone());
+            Gui::new((800, 600), drawing.device.as_ref(), drawing.queue.as_ref());
         gui.debug = true;
 
         let texture = Arc::new(rugui::texture::Texture::from_bytes(
@@ -75,7 +75,9 @@ impl ApplicationHandler for App {
         let mut row2 = Element::new().with_label("Row 2");
         let mut row3 = Element::new().with_label("Row 3");
 
+        row1.text_str("Hello, world!");
         let row1_styles = &mut row1.styles;
+        row1_styles.text_mut().color = Color::GREEN;
         row1_styles.set_bg_texture(Some(texture.clone()));
         row1_styles.transfomr_mut().position = Position::Left;
         row1_styles.transfomr_mut().align = Position::Left;

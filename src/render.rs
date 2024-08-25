@@ -39,7 +39,7 @@ impl GpuBound {
             }],
         };
 
-    pub fn new(queue: Arc<wgpu::Queue>, device: Arc<wgpu::Device>, size: (u32, u32)) -> Self {
+    pub fn new(queue: &wgpu::Queue, device: &wgpu::Device, size: (u32, u32)) -> Self {
         let dimensions_bind_group_layout =
             device.create_bind_group_layout(&Self::DIMENSIONS_LAYOUT);
 
