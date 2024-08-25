@@ -148,5 +148,5 @@ Running in release mode ensures smoother performance, especially for more comple
 - Make sure you are running examples in release mode for optimal performance. Use `cargo run --release` to avoid debug mode overhead.
 - Check for any unnecessary computations or excessive updates in your event handling and rendering code.
 
-For more detailed troubleshooting, please refer to the [rugui GitHub Issues page](https://github.com/i-2001/rugui/issues) or the [discussion forum](https://github.com/i-2001/rugui/discussions).
+For more detailed troubleshooting, please refer to the [rugui GitHub Issues page](https://github.com/it-2001/rugui/issues) or the [discussion forum](https://github.com/it-2001/rugui/issues).
 
