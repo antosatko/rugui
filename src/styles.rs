@@ -2,11 +2,8 @@ use std::sync::Arc;
 
 use bytemuck::Zeroable;
 
-use crate::{
-    render::{Color, LinearGradient, RadialGradient},
-    texture::Texture,
-};
-
+use crate::{render::Color, texture::Texture};
+#[derive(Debug, Clone)]
 pub struct StyleSheet {
     /// Transform of the element
     pub(crate) transform: Transform,
@@ -26,15 +23,25 @@ pub struct StyleSheet {
     ///
     /// Not implemented yet
     pub(crate) border: Border,
+
+    pub(crate) text: Text,
     /// Visibility of the element
     ///
     /// If false, the element and its children will not be rendered
     pub(crate) visible: bool,
 
-    pub(crate) flags: Flags, 
+    pub(crate) flags: Flags,
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug, Clone)]
+pub struct Text {
+    pub size: Size,
+    pub color: Color,
+    pub justify: Position,
+    pub fit: bool,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct Transform {
     /// Rotation of the element
     ///
@@ -74,14 +81,17 @@ pub struct Transform {
     pub padding: Size,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Flags {
     pub(crate) dirty_color: bool,
     pub(crate) dirty_texture: bool,
     pub(crate) dirty_lin_gradient: bool,
     pub(crate) dirty_rad_gradient: bool,
+    pub(crate) dirty_text: bool,
     pub(crate) dirty_transform: bool,
     pub(crate) dirty_border: bool,
+
+    pub(crate) recalc_transform: bool,
 }
 
 impl Default for Flags {
@@ -91,8 +101,11 @@ impl Default for Flags {
             dirty_texture: true,
             dirty_lin_gradient: true,
             dirty_rad_gradient: true,
+            dirty_text: true,
             dirty_transform: true,
             dirty_border: true,
+
+            recalc_transform: true,
         }
     }
 }
@@ -134,6 +147,7 @@ impl Default for StyleSheet {
                 max_radius: Size::None,
                 visible: false,
             },
+            text: Text::default(),
             visible: true,
             flags: Flags::default(),
         }
@@ -266,17 +280,17 @@ impl StyleSheet {
     }
 
     pub fn transfomr_mut(&mut self) -> &mut Transform {
-        self.flags.dirty_transform = true;
+        self.flags.recalc_transform = true;
         &mut self.transform
     }
 
-    pub fn get_bg_color(&self) -> Color {
-        self.background.color
+    pub fn bg_color(&self) -> &Color {
+        &self.background.color
     }
 
-    pub fn set_bg_color(&mut self, color: Color) {
+    pub fn bg_color_mut(&mut self) -> &mut Color {
         self.flags.dirty_color = true;
-        self.background.color = color;
+        &mut self.background.color
     }
 
     pub fn get_bg_texture(&self) -> Option<Arc<Texture>> {
@@ -288,22 +302,31 @@ impl StyleSheet {
         self.background.texture = texture;
     }
 
-    pub fn get_bg_lin_gradient(&self) -> Option<Arc<LinearGradient>> {
+    pub fn get_bg_lin_gradient(&self) -> Option<LinearGradient> {
         self.background.lin_gradient.clone()
     }
 
-    pub fn set_bg_lin_gradient(&mut self, lin_gradient: Option<Arc<LinearGradient>>) {
+    pub fn set_bg_lin_gradient(&mut self, lin_gradient: Option<LinearGradient>) {
         self.flags.dirty_lin_gradient = true;
         self.background.lin_gradient = lin_gradient;
     }
 
-    pub fn get_bg_rad_gradient(&self) -> Option<Arc<RadialGradient>> {
+    pub fn get_bg_rad_gradient(&self) -> Option<RadialGradient> {
         self.background.rad_gradient.clone()
     }
 
-    pub fn set_bg_rad_gradient(&mut self, rad_gradient: Option<Arc<RadialGradient>>) {
+    pub fn set_bg_rad_gradient(&mut self, rad_gradient: Option<RadialGradient>) {
         self.flags.dirty_rad_gradient = true;
         self.background.rad_gradient = rad_gradient;
+    }
+
+    pub fn get_text(&self) -> &Text {
+        &self.text
+    }
+
+    pub fn text_mut(&mut self) -> &mut Text {
+        self.flags.dirty_text = true;
+        &mut self.text
     }
 
     pub fn get_border(&self) -> &Border {
@@ -325,7 +348,7 @@ impl StyleSheet {
 }
 
 /// Position of the element relative to its parent
-#[derive(Debug)]
+#[derive(Default, Debug, Clone)]
 pub enum Position {
     Top,
     TopLeft,
@@ -335,6 +358,7 @@ pub enum Position {
     BottomRight,
     BottomLeft,
     Left,
+    #[default]
     Center,
     Custom(Size, Size),
 }
@@ -371,6 +395,7 @@ impl Position {
 /// Border of the element
 ///
 /// Not implemented yet
+#[derive(Debug, Clone, Default)]
 pub struct Border {
     pub background: Background,
     pub width: Size,
@@ -423,6 +448,7 @@ pub enum Rotation {
 /// 2. Color
 ///
 /// Background is rgba(0, 0, 0, 0) by default
+#[derive(Debug, Clone, Default)]
 pub struct Background {
     /// Color of the element
     ///
@@ -435,9 +461,27 @@ pub struct Background {
     /// Linear gradient of the element
     ///
     /// Not implemented yet
-    pub lin_gradient: Option<Arc<LinearGradient>>,
+    pub lin_gradient: Option<LinearGradient>,
     /// Radial gradient of the element
     ///
     /// Not implemented yet
-    pub rad_gradient: Option<Arc<RadialGradient>>,
+    pub rad_gradient: Option<RadialGradient>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ColorPoint {
+    pub position: Position,
+    pub color: Color,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct LinearGradient {
+    pub p1: ColorPoint,
+    pub p2: ColorPoint,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RadialGradient {
+    pub p1: ColorPoint,
+    pub p2: ColorPoint,
 }

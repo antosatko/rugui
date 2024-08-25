@@ -1,7 +1,6 @@
 use image::GenericImageView;
 
-use crate::render::GpuProxy;
-
+#[derive(Debug)]
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
@@ -33,12 +32,22 @@ impl Texture {
             ],
         };
 
-    pub fn from_bytes(proxy: &GpuProxy, bytes: &[u8], label: &str) -> Self {
+    pub fn from_bytes(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        bytes: &[u8],
+        label: &str,
+    ) -> Self {
         let img = image::load_from_memory(bytes).unwrap();
-        Self::from_image(proxy, &img, Some(label))
+        Self::from_image(device, queue, &img, Some(label))
     }
 
-    pub fn from_image(proxy: &GpuProxy, img: &image::DynamicImage, label: Option<&str>) -> Self {
+    pub fn from_image(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        img: &image::DynamicImage,
+        label: Option<&str>,
+    ) -> Self {
         let rgba = img.to_rgba8();
         let dimensions = img.dimensions();
 
@@ -47,7 +56,7 @@ impl Texture {
             height: dimensions.1,
             depth_or_array_layers: 1,
         };
-        let texture = proxy.device.create_texture(&wgpu::TextureDescriptor {
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
             label,
             size,
             mip_level_count: 1,
@@ -58,7 +67,7 @@ impl Texture {
             view_formats: &[],
         });
 
-        proxy.queue.write_texture(
+        queue.write_texture(
             wgpu::ImageCopyTexture {
                 aspect: wgpu::TextureAspect::All,
                 texture: &texture,
@@ -75,7 +84,7 @@ impl Texture {
         );
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = proxy.device.create_sampler(&wgpu::SamplerDescriptor {
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -85,10 +94,8 @@ impl Texture {
             ..Default::default()
         });
 
-        let bind_group = proxy.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &proxy
-                .device
-                .create_bind_group_layout(&Self::BIND_GROUP_LAYOUT),
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &device.create_bind_group_layout(&Self::BIND_GROUP_LAYOUT),
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,

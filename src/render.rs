@@ -1,32 +1,18 @@
 use std::sync::Arc;
 
 use nalgebra::Point2;
-use wgpu::{core::pipeline, include_wgsl};
+use wgpu::include_wgsl;
 
-use crate::texture::Texture;
+use crate::{
+    styles::{LinearGradient, RadialGradient},
+    texture::Texture,
+};
 
 pub struct GpuBound {
-    pub proxy: GpuProxy,
     pub dimensions_buffer: wgpu::Buffer,
     pub dimensions_bind_group: wgpu::BindGroup,
     pub size: (u32, u32),
-}
-
-#[derive(Debug, Clone)]
-pub struct GpuProxy {
-    pub device: Arc<wgpu::Device>,
-    pub queue: Arc<wgpu::Queue>,
-    pub pipelines: Arc<Pipelines>,
-}
-
-impl GpuProxy {
-    pub fn new(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, pipelines: Pipelines) -> Self {
-        Self {
-            device: device,
-            queue: queue,
-            pipelines: Arc::new(pipelines),
-        }
-    }
+    pub pipelines: Pipelines,
 }
 
 #[derive(Debug)]
@@ -88,9 +74,9 @@ impl GpuBound {
         let texture_bind_group_layout =
             device.create_bind_group_layout(&Texture::BIND_GROUP_LAYOUT);
         let radial_gradient_bind_group_layout =
-            device.create_bind_group_layout(&RadialGradient::LAYOUT);
+            device.create_bind_group_layout(&RenderRadialGradient::LAYOUT);
         let linear_gradient_bind_group_layout =
-            device.create_bind_group_layout(&LinearGradient::LAYOUT);
+            device.create_bind_group_layout(&RenderLinearGradient::LAYOUT);
 
         let color_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -301,19 +287,15 @@ impl GpuBound {
             });
 
         Self {
-            proxy: GpuProxy::new(
-                device,
-                queue,
-                Pipelines {
-                    color_pipeline,
-                    texture_pipeline,
-                    radial_gradient_pipeline,
-                    linear_gradient_pipeline,
-                },
-            ),
             dimensions_buffer,
             dimensions_bind_group,
             size,
+            pipelines: Pipelines {
+                color_pipeline,
+                texture_pipeline,
+                radial_gradient_pipeline,
+                linear_gradient_pipeline,
+            },
         }
     }
 
@@ -328,7 +310,7 @@ impl GpuBound {
     }
 }
 
-pub struct RadialGradient {
+pub struct RenderRadialGradient {
     pub center_color: Color,
     pub center: [f32; 2],
     pub radius: f32,
@@ -340,7 +322,7 @@ pub struct RadialGradient {
     pub outer_color_buffer: wgpu::Buffer,
 }
 
-impl RadialGradient {
+impl RenderRadialGradient {
     pub const LAYOUT: wgpu::BindGroupLayoutDescriptor<'static> = wgpu::BindGroupLayoutDescriptor {
         label: Some("Radial Gradient Bind Group Layout"),
         entries: &[
@@ -391,38 +373,38 @@ impl RadialGradient {
         ],
     };
 
-    pub fn zeroed(proxy: &GpuProxy) -> Self {
-        let center_color_buffer = proxy.device.create_buffer(&wgpu::BufferDescriptor {
+    pub fn zeroed(device: &wgpu::Device) -> Self {
+        let center_color_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Center Color Buffer"),
             size: std::mem::size_of::<Color>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let center_buffer = proxy.device.create_buffer(&wgpu::BufferDescriptor {
+        let center_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Center Buffer"),
             size: std::mem::size_of::<[f32; 2]>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let radius_buffer = proxy.device.create_buffer(&wgpu::BufferDescriptor {
+        let radius_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Radius Buffer"),
             size: std::mem::size_of::<[f32; 1]>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let outer_color_buffer = proxy.device.create_buffer(&wgpu::BufferDescriptor {
+        let outer_color_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Outer Color Buffer"),
             size: std::mem::size_of::<Color>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let bind_group_layout = proxy.device.create_bind_group_layout(&Self::LAYOUT);
+        let bind_group_layout = device.create_bind_group_layout(&Self::LAYOUT);
 
-        let bind_group = proxy.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Radial Gradient Bind Group"),
             layout: &bind_group_layout,
             entries: &[
@@ -484,59 +466,66 @@ impl RadialGradient {
         }
     }
 
-    pub fn set_center_color(&mut self, color: Color, proxy: &GpuProxy) {
+    pub fn set_center_color(&mut self, color: Color, queue: &wgpu::Queue) {
         self.center_color = color;
-        proxy
-            .queue
-            .write_buffer(&self.center_color_buffer, 0, bytemuck::cast_slice(&[color]));
+
+        queue.write_buffer(&self.center_color_buffer, 0, bytemuck::cast_slice(&[color]));
     }
 
-    pub fn set_center(&mut self, center: [f32; 2], proxy: &GpuProxy) {
+    pub fn set_center(&mut self, center: [f32; 2], queue: &wgpu::Queue) {
         self.center = center;
-        proxy
-            .queue
-            .write_buffer(&self.center_buffer, 0, bytemuck::cast_slice(&[center]));
+
+        queue.write_buffer(&self.center_buffer, 0, bytemuck::cast_slice(&[center]));
     }
 
-    pub fn set_radius(&mut self, radius: f32, proxy: &GpuProxy) {
+    pub fn set_radius(&mut self, radius: f32, queue: &wgpu::Queue) {
         self.radius = radius;
-        proxy
-            .queue
-            .write_buffer(&self.radius_buffer, 0, bytemuck::cast_slice(&[radius]));
+
+        queue.write_buffer(&self.radius_buffer, 0, bytemuck::cast_slice(&[radius]));
     }
 
-    pub fn set_outer_color(&mut self, color: Color, proxy: &GpuProxy) {
+    pub fn set_outer_color(&mut self, color: Color, queue: &wgpu::Queue) {
         self.outer_color = color;
-        proxy
-            .queue
-            .write_buffer(&self.outer_color_buffer, 0, bytemuck::cast_slice(&[color]));
+
+        queue.write_buffer(&self.outer_color_buffer, 0, bytemuck::cast_slice(&[color]));
     }
 
     pub fn bind(&self) -> &wgpu::BindGroup {
         &self.bind_group
     }
 
-    pub fn write_all(&self, proxy: &GpuProxy) {
-        proxy.queue.write_buffer(
+    pub fn write_all(&self, queue: &wgpu::Queue) {
+        queue.write_buffer(
             &self.center_color_buffer,
             0,
             bytemuck::cast_slice(&[self.center_color]),
         );
-        proxy
-            .queue
-            .write_buffer(&self.center_buffer, 0, bytemuck::cast_slice(&[self.center]));
-        proxy
-            .queue
-            .write_buffer(&self.radius_buffer, 0, bytemuck::cast_slice(&[self.radius]));
-        proxy.queue.write_buffer(
+
+        queue.write_buffer(&self.center_buffer, 0, bytemuck::cast_slice(&[self.center]));
+
+        queue.write_buffer(&self.radius_buffer, 0, bytemuck::cast_slice(&[self.radius]));
+        queue.write_buffer(
             &self.outer_color_buffer,
             0,
             bytemuck::cast_slice(&[self.outer_color]),
         );
     }
+
+    pub fn from_style(&mut self, style: &RadialGradient) {
+        self.center = style.p1.position.normalized();
+        self.center_color = style.p1.color;
+        self.radius = {
+            let p1 = self.center;
+            let p2 = style.p2.position.normalized();
+            let a = p2[0] - p1[0];
+            let b = p2[1] - p1[1];
+            f32::sqrt(a * a + b * b)
+        };
+        self.outer_color = style.p2.color;
+    }
 }
 
-pub struct LinearGradient {
+pub struct RenderLinearGradient {
     pub start_color: Color,
     pub end_color: Color,
     pub start: [f32; 2],
@@ -548,7 +537,7 @@ pub struct LinearGradient {
     pub end_buffer: wgpu::Buffer,
 }
 
-impl LinearGradient {
+impl RenderLinearGradient {
     pub const LAYOUT: wgpu::BindGroupLayoutDescriptor<'static> = wgpu::BindGroupLayoutDescriptor {
         label: Some("Linear Gradient Bind Group Layout"),
         entries: &[
@@ -599,38 +588,38 @@ impl LinearGradient {
         ],
     };
 
-    pub fn zeroed(proxy: &GpuProxy) -> Self {
-        let start_color_buffer = proxy.device.create_buffer(&wgpu::BufferDescriptor {
+    pub fn zeroed(device: &wgpu::Device) -> Self {
+        let start_color_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Start Color Buffer"),
             size: std::mem::size_of::<Color>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let end_color_buffer = proxy.device.create_buffer(&wgpu::BufferDescriptor {
+        let end_color_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("End Color Buffer"),
             size: std::mem::size_of::<Color>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let start_buffer = proxy.device.create_buffer(&wgpu::BufferDescriptor {
+        let start_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Start Buffer"),
             size: std::mem::size_of::<[f32; 2]>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let end_buffer = proxy.device.create_buffer(&wgpu::BufferDescriptor {
+        let end_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("End Buffer"),
             size: std::mem::size_of::<[f32; 2]>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let bind_group_layout = proxy.device.create_bind_group_layout(&Self::LAYOUT);
+        let bind_group_layout = device.create_bind_group_layout(&Self::LAYOUT);
 
-        let bind_group = proxy.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Linear Gradient Bind Group"),
             layout: &bind_group_layout,
             entries: &[
@@ -692,59 +681,60 @@ impl LinearGradient {
         }
     }
 
-    pub fn set_start_color(&mut self, color: Color, proxy: &GpuProxy) {
+    pub fn set_start_color(&mut self, color: Color, queue: &wgpu::Queue) {
         self.start_color = color;
-        proxy
-            .queue
-            .write_buffer(&self.start_color_buffer, 0, bytemuck::cast_slice(&[color]));
+
+        queue.write_buffer(&self.start_color_buffer, 0, bytemuck::cast_slice(&[color]));
     }
 
-    pub fn set_end_color(&mut self, color: Color, proxy: &GpuProxy) {
+    pub fn set_end_color(&mut self, color: Color, queue: &wgpu::Queue) {
         self.end_color = color;
-        proxy
-            .queue
-            .write_buffer(&self.end_color_buffer, 0, bytemuck::cast_slice(&[color]));
+
+        queue.write_buffer(&self.end_color_buffer, 0, bytemuck::cast_slice(&[color]));
     }
 
-    pub fn set_start(&mut self, start: [f32; 2], proxy: &GpuProxy) {
+    pub fn set_start(&mut self, start: [f32; 2], queue: &wgpu::Queue) {
         self.start = start;
-        proxy
-            .queue
-            .write_buffer(&self.start_buffer, 0, bytemuck::cast_slice(&[start]));
+
+        queue.write_buffer(&self.start_buffer, 0, bytemuck::cast_slice(&[start]));
     }
 
-    pub fn set_end(&mut self, end: [f32; 2], proxy: &GpuProxy) {
+    pub fn set_end(&mut self, end: [f32; 2], queue: &wgpu::Queue) {
         self.end = end;
-        proxy
-            .queue
-            .write_buffer(&self.end_buffer, 0, bytemuck::cast_slice(&[end]));
+
+        queue.write_buffer(&self.end_buffer, 0, bytemuck::cast_slice(&[end]));
     }
 
     pub fn bind(&self) -> &wgpu::BindGroup {
         &self.bind_group
     }
 
-    pub fn write_all(&self, proxy: &GpuProxy) {
-        proxy.queue.write_buffer(
+    pub fn write_all(&self, queue: &wgpu::Queue) {
+        queue.write_buffer(
             &self.start_color_buffer,
             0,
             bytemuck::cast_slice(&[self.start_color]),
         );
-        proxy.queue.write_buffer(
+        queue.write_buffer(
             &self.end_color_buffer,
             0,
             bytemuck::cast_slice(&[self.end_color]),
         );
-        proxy
-            .queue
-            .write_buffer(&self.start_buffer, 0, bytemuck::cast_slice(&[self.start]));
-        proxy
-            .queue
-            .write_buffer(&self.end_buffer, 0, bytemuck::cast_slice(&[self.end]));
+
+        queue.write_buffer(&self.start_buffer, 0, bytemuck::cast_slice(&[self.start]));
+
+        queue.write_buffer(&self.end_buffer, 0, bytemuck::cast_slice(&[self.end]));
+    }
+
+    pub fn from_style(&mut self, style: &LinearGradient) {
+        self.start = style.p1.position.normalized();
+        self.start_color = style.p1.color;
+        self.end = style.p2.position.normalized();
+        self.end_color = style.p2.color;
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Color {
@@ -756,14 +746,15 @@ pub struct Color {
 
 pub struct RenderElement {
     pub data: RenderElementData,
-    center_buffer: wgpu::Buffer,
-    size_buffer: wgpu::Buffer,
-    rotation_buffer: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
-    color: Option<RenderColor>,
-    texture: Option<Arc<Texture>>,
-    radial_gradient: Option<Arc<RadialGradient>>,
-    linear_gradient: Option<Arc<LinearGradient>>,
+    pub center_buffer: wgpu::Buffer,
+    pub size_buffer: wgpu::Buffer,
+    pub rotation_buffer: wgpu::Buffer,
+    pub bind_group: wgpu::BindGroup,
+    pub color: Option<RenderColor>,
+    pub texture: Option<Arc<Texture>>,
+    pub radial_gradient: Option<RenderRadialGradient>,
+    pub linear_gradient: Option<RenderLinearGradient>,
+    pub text: Option<Arc<Texture>>,
 }
 
 pub struct RenderColor {
@@ -787,19 +778,17 @@ impl RenderColor {
             }],
         };
 
-    pub fn uninit(proxy: &GpuProxy) -> Self {
-        let buffer = proxy.device.create_buffer(&wgpu::BufferDescriptor {
+    pub fn uninit(device: &wgpu::Device) -> Self {
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Render Color Buffer"),
             size: std::mem::size_of::<Color>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let bind_group_layout = proxy
-            .device
-            .create_bind_group_layout(&Self::BIND_GROUP_LAYOUT);
+        let bind_group_layout = device.create_bind_group_layout(&Self::BIND_GROUP_LAYOUT);
 
-        let bind_group = proxy.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Render Color Bind Group"),
             layout: &bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
@@ -815,10 +804,8 @@ impl RenderColor {
         Self { buffer, bind_group }
     }
 
-    pub fn set_color(&self, color: Color, proxy: &GpuProxy) {
-        proxy
-            .queue
-            .write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[color]));
+    pub fn set_color(&self, color: Color, queue: &wgpu::Queue) {
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[color]));
     }
 
     pub fn bind(&self) -> &wgpu::BindGroup {
@@ -845,19 +832,17 @@ impl RenderElementData {
         }
     }
 
-    pub fn zeroed() -> Self {
-        Self {
-            center: [0.0, 0.0],
-            size: [0.0, 0.0],
-            rotation: 0.0,
-            color: Color {
-                r: 0.0,
-                g: 0.0,
-                b: 0.0,
-                a: 0.0,
-            },
-        }
-    }
+    pub const ZEROED: Self = Self {
+        center: [0.0, 0.0],
+        size: [0.0, 0.0],
+        rotation: 0.0,
+        color: Color {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: 0.0,
+        },
+    };
 
     pub fn from_transform(transform: &crate::ElementTransform) -> Self {
         Self {
@@ -933,31 +918,31 @@ impl RenderElement {
         ],
     };
 
-    pub fn zeroed(proxy: &GpuProxy) -> Self {
-        let center_buffer = proxy.device.create_buffer(&wgpu::BufferDescriptor {
+    pub fn zeroed(device: &wgpu::Device) -> Self {
+        let center_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Center Buffer"),
             size: std::mem::size_of::<[f32; 2]>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let size_buffer = proxy.device.create_buffer(&wgpu::BufferDescriptor {
+        let size_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Size Buffer"),
             size: std::mem::size_of::<[f32; 2]>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let rotation_buffer = proxy.device.create_buffer(&wgpu::BufferDescriptor {
+        let rotation_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Rotation Buffer"),
             size: std::mem::size_of::<[f32; 1]>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let bind_group_layout = proxy.device.create_bind_group_layout(&Self::LAYOUT);
+        let bind_group_layout = device.create_bind_group_layout(&Self::LAYOUT);
 
-        let bind_group = proxy.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Render Element Bind Group"),
             layout: &bind_group_layout,
             entries: &[
@@ -989,7 +974,7 @@ impl RenderElement {
         });
 
         Self {
-            data: RenderElementData::zeroed(),
+            data: RenderElementData::ZEROED,
             center_buffer,
             size_buffer,
             rotation_buffer,
@@ -998,22 +983,23 @@ impl RenderElement {
             texture: None,
             radial_gradient: None,
             linear_gradient: None,
+            text: None,
         }
     }
 
-    pub fn set_transform(&mut self, transform: &crate::ElementTransform, proxy: &GpuProxy) {
+    pub fn set_transform(&mut self, transform: &crate::ElementTransform, queue: &wgpu::Queue) {
         self.data.update_transform(transform);
-        self.write_all(proxy);
+        self.write_all(queue);
     }
 
-    pub fn set_color(&mut self, color: Color, proxy: &GpuProxy) {
+    pub fn set_color(&mut self, color: Color, queue: &wgpu::Queue, device: &wgpu::Device) {
         match &mut self.color {
             Some(render_color) => {
-                render_color.set_color(color, proxy);
+                render_color.set_color(color, queue);
             }
             None => {
-                let render_color = RenderColor::uninit(proxy);
-                render_color.set_color(color, proxy);
+                let render_color = RenderColor::uninit(device);
+                render_color.set_color(color, queue);
                 self.color = Some(render_color);
             }
         }
@@ -1023,29 +1009,23 @@ impl RenderElement {
         self.texture = Some(texture);
     }
 
-    pub fn set_radial_gradient(&mut self, radial_gradient: Arc<RadialGradient>) {
-        self.radial_gradient = Some(radial_gradient);
+    pub fn set_text(&mut self, text: Arc<Texture>) {
+        self.text = Some(text);
     }
 
-    pub fn set_linear_gradient(&mut self, linear_gradient: Arc<LinearGradient>) {
-        self.linear_gradient = Some(linear_gradient);
-    }
-
-    pub fn update(&mut self, data: RenderElementData, proxy: &GpuProxy) {
+    pub fn update(&mut self, data: RenderElementData, queue: &wgpu::Queue) {
         self.data = data;
-        self.write_all(proxy);
+        self.write_all(queue);
     }
 
-    pub fn write_all(&self, proxy: &GpuProxy) {
-        proxy.queue.write_buffer(
+    pub fn write_all(&self, queue: &wgpu::Queue) {
+        queue.write_buffer(
             &self.center_buffer,
             0,
             bytemuck::cast_slice(&self.data.center),
         );
-        proxy
-            .queue
-            .write_buffer(&self.size_buffer, 0, bytemuck::cast_slice(&self.data.size));
-        proxy.queue.write_buffer(
+        queue.write_buffer(&self.size_buffer, 0, bytemuck::cast_slice(&self.data.size));
+        queue.write_buffer(
             &self.rotation_buffer,
             0,
             bytemuck::cast_slice(&[self.data.rotation]),
@@ -1085,6 +1065,9 @@ impl RenderElement {
         }
         if let Some(render_color) = &self.color {
             Self::draw_command(&pipelines.color_pipeline, pass, render_color.bind());
+        }
+        if let Some(texture) = &self.text {
+            Self::draw_command(&pipelines.texture_pipeline, pass, &texture.bind_group);
         }
     }
 

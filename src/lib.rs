@@ -1,9 +1,12 @@
 use std::{collections::HashMap, sync::Arc};
 
 use events::{EventPoll, EventResponse, EventTypes, WindowEvent};
+use image::{DynamicImage, GenericImage, ImageBuffer, Rgba};
 use nalgebra::Point2;
-use render::{Color, GpuBound, LinearGradient, RadialGradient, RenderElement};
-use styles::{Position, Size, StyleSheet};
+use render::{
+    GpuBound, RenderElement, RenderLinearGradient, RenderRadialGradient,
+};
+use styles::{Size, StyleSheet};
 
 pub mod events;
 pub mod render;
@@ -51,7 +54,10 @@ where
         let gpu = GpuBound::new(queue, device, size);
         let this = Self {
             elements: HashMap::new(),
-            events: EventPoll { events: Vec::new(), queue: Vec::new() },
+            events: EventPoll {
+                events: Vec::new(),
+                queue: Vec::new(),
+            },
             last_key: 0,
             entry: None,
             size,
@@ -96,7 +102,7 @@ where
                 scale: Point2::new(self.size.0 as f32, self.size.1 as f32),
                 rotation: 0.0,
             };
-            self.write_element(key, &transform);
+            self.element_transform(key, &transform);
         }
     }
 
@@ -232,7 +238,10 @@ where
             events::WindowEvent::MouseMove { .. } => {
                 let position = self.input.mouse;
                 let prev = self.input.prev_mouse;
-                let (this, prev) = (element.transform.point_collision(position), element.transform.point_collision(prev));
+                let (this, prev) = (
+                    element.transform.point_collision(position),
+                    element.transform.point_collision(prev),
+                );
                 match (this, prev) {
                     (true, false) => {
                         if let Some(msg) = element.event_listeners.get(&EventTypes::MouseEnter) {
@@ -332,9 +341,6 @@ where
 
     pub fn resize(&mut self, size: (u32, u32), queue: &wgpu::Queue) {
         self.resolve_events();
-        for element in self.elements.values_mut() {
-            element.styles.flags.dirty_transform = true;
-        }
         self.size = size;
         self.gpu.resize((size.0, size.1), queue);
         let entry_key = if let Some(entry) = &self.entry {
@@ -342,7 +348,10 @@ where
         } else {
             return;
         };
-        self.write_element(
+        if let Some(entry) = self.elements.get_mut(&entry_key) {
+            entry.styles.flags.recalc_transform = true;
+        }
+        self.element_transform(
             *entry_key,
             &ElementTransform {
                 position: Point2::new(size.0 as f32 / 2.0, size.1 as f32 / 2.0),
@@ -352,15 +361,47 @@ where
         );
     }
 
-    fn write_element(&mut self, key: ElementKey, transform: &ElementTransform) {
-        if true {
-            self.traverse_elements_mut(key, &mut |element| {
-                element.styles.flags.dirty_transform = true;
+    pub fn update(&mut self) {
+        self.resolve_events();
+        let entry_key = if let Some(entry) = &self.entry {
+            entry
+        } else {
+            return;
+        };
+        self.element_transform(
+            *entry_key,
+            &ElementTransform {
+                position: Point2::new(self.size.0 as f32 / 2.0, self.size.1 as f32 / 2.0),
+                scale: Point2::new(self.size.0 as f32, self.size.1 as f32),
+                rotation: 0.0,
+            },
+        );
+    }
+
+    pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        let entry_key = if let Some(entry) = &self.entry {
+            entry
+        } else {
+            return;
+        };
+        self.traverse_elements_mut(*entry_key, &mut |e| e.write(device, queue))
+    }
+
+    fn element_transform(&mut self, key: ElementKey, transform: &ElementTransform) {
+        let element = match self.elements.get_mut(&key) {
+            Some(element) => element,
+            None => return,
+        };
+        if element.styles.flags.recalc_transform {
+            self.traverse_elements_mut(key, &mut |e| {
+                e.styles.flags.recalc_transform = true;
             });
-            let element = match self.elements.get_mut(&key) {
-                Some(element) => element,
-                None => return,
-            };
+        }
+        let element = match self.elements.get_mut(&key) {
+            Some(element) => element,
+            None => return,
+        };
+        if element.styles.flags.recalc_transform {
             let (width, height) = (
                 element
                     .styles
@@ -396,11 +437,9 @@ where
             };
             let pre_collision = element.transform.point_collision(self.input.mouse);
 
-            element
-            .render_element
-            .set_transform(&transform, &self.gpu.proxy);
             element.transform = transform;
-            element.styles.flags.dirty_transform = false;
+            element.styles.flags.dirty_transform = true;
+            element.styles.flags.recalc_transform = false;
 
             let post_collision = element.transform.point_collision(self.input.mouse);
             match (pre_collision, post_collision) {
@@ -408,7 +447,9 @@ where
                     if let Some(msg) = element.event_listeners.get(&EventTypes::MouseLeave) {
                         self.events.events.push(events::Event {
                             event_type: EventTypes::MouseLeave,
-                            event: WindowEvent::MouseMove { position: self.input.mouse },
+                            event: WindowEvent::MouseMove {
+                                position: self.input.mouse,
+                            },
                             msg: msg.clone(),
                             key,
                         });
@@ -418,7 +459,9 @@ where
                     if let Some(msg) = element.event_listeners.get(&EventTypes::MouseEnter) {
                         self.events.events.push(events::Event {
                             event_type: EventTypes::MouseEnter,
-                            event: WindowEvent::MouseMove { position: self.input.mouse },
+                            event: WindowEvent::MouseMove {
+                                position: self.input.mouse,
+                            },
                             msg: msg.clone(),
                             key,
                         });
@@ -427,35 +470,7 @@ where
                 _ => {}
             }
         }
-        let element = match self.elements.get_mut(&key) {
-            Some(element) => element,
-            None => return,
-        };
-        element.parent = transform.clone();
         let transform = &element.transform;
-        if element.styles.flags.dirty_texture {
-            if let Some(texture) = &element.styles.background.texture {
-                element.render_element.set_texture(texture.clone());
-            }
-            element.styles.flags.dirty_texture = false;
-        }
-        if element.styles.flags.dirty_rad_gradient {
-            if let Some(grad) = &element.styles.background.rad_gradient {
-                element.render_element.set_radial_gradient(grad.clone());
-            }
-            element.styles.flags.dirty_rad_gradient = false;
-        }
-        if element.styles.flags.dirty_lin_gradient {
-            if let Some(grad) = &element.styles.background.lin_gradient {
-                element.render_element.set_linear_gradient(grad.clone());
-            }
-            element.styles.flags.dirty_lin_gradient = false;
-        }
-        if element.styles.flags.dirty_color {
-            let color = element.styles.background.color;
-            element.render_element.set_color(color, &self.gpu.proxy);
-            element.styles.flags.dirty_color = false;
-        }
         match element.children.to_owned() {
             Children::Element(child) => {
                 let (pad_width, pad_height) = match &element.styles.transform.padding {
@@ -479,7 +494,7 @@ where
                     ),
                     ..transform.clone()
                 };
-                self.write_element(child.clone(), &transform);
+                self.element_transform(child.clone(), &transform);
                 return;
             }
             Children::Layers(children) => {
@@ -505,7 +520,7 @@ where
                     ..transform.clone()
                 };
                 for child in children {
-                    self.write_element(child, &transform);
+                    self.element_transform(child, &transform);
                 }
             }
             Children::Rows { children, .. } => {
@@ -547,7 +562,7 @@ where
                     y += space;
                     remaining_height -= space;
                     len -= 1.0;
-                    self.write_element(element, &transform);
+                    self.element_transform(element, &transform);
                 }
             }
             Children::Columns { children, .. } => {
@@ -586,13 +601,13 @@ where
                         scale: Point2::new(space, transform.scale.y),
                         rotation: transform.rotation,
                     };
-                    self.write_element(element, &transform);
+                    self.element_transform(element, &transform);
                     x += space;
                     remaining_width -= space;
                     len -= 1.0;
                 }
             }
-            Children::None => return,
+            Children::None => (),
         };
     }
 
@@ -618,9 +633,9 @@ where
         if !element.styles.visible {
             return;
         }
-        element
-            .render_element
-            .render(&self.gpu.proxy.pipelines, pass);
+        if let Some(render) = &element.render_element {
+            render.render(&self.gpu.pipelines, pass)
+        }
         match element.children.to_owned() {
             Children::Element(child) => {
                 self.render_element(child, pass);
@@ -644,55 +659,36 @@ where
         }
     }
 
-    pub fn texture_from_bytes(&self, bytes: &[u8], label: &str) -> Arc<texture::Texture> {
-        Arc::new(texture::Texture::from_bytes(&self.gpu.proxy, bytes, label))
+    /*pub fn texture_from_bytes(&self, bytes: &[u8], label: &str, device: &wgpu::Device, queue: &wgpu::Queue) -> Arc<texture::Texture> {
+        Arc::new(texture::Texture::from_bytes(device, queue, bytes, label))
     }
 
     pub fn texture_from_image(
         &self,
         img: &image::DynamicImage,
         label: Option<&str>,
+        device: &wgpu::Device, queue: &wgpu::Queue
     ) -> Arc<texture::Texture> {
-        Arc::new(texture::Texture::from_image(&self.gpu.proxy, img, label))
+        Arc::new(texture::Texture::from_image(device, queue, img, label))
     }
 
-    pub fn radial_gradient(
+    */
+    fn texture_from_image_buffer(
         &self,
-        center: (Position, Color),
-        outer: (Position, Color),
-    ) -> RadialGradient {
-        let mut grad = RadialGradient::zeroed(&self.gpu.proxy);
-        let center_pos = center.0.normalized();
-        grad.set_center(center_pos, &self.gpu.proxy);
-        let outer_pos = outer.0.normalized();
-        let dist = {
-            let x = center_pos[0] - outer_pos[0];
-            let y = center_pos[1] - outer_pos[1];
-            (x * x + y * y).sqrt()
-        };
-        grad.set_radius(dist, &self.gpu.proxy);
-        grad.set_center_color(center.1, &self.gpu.proxy);
-        grad.set_outer_color(outer.1, &self.gpu.proxy);
-        grad
-    }
-
-    pub fn linear_gradient(
-        &self,
-        start: (Position, Color),
-        end: (Position, Color),
-    ) -> LinearGradient {
-        let mut grad = LinearGradient::zeroed(&self.gpu.proxy);
-        let start_pos = start.0.normalized();
-        grad.set_start(start_pos, &self.gpu.proxy);
-        let end_pos = end.0.normalized();
-        grad.set_end(end_pos, &self.gpu.proxy);
-        grad.set_start_color(start.1, &self.gpu.proxy);
-        grad.set_end_color(end.1, &self.gpu.proxy);
-        grad
+        img: ImageBuffer<Rgba<u8>, Vec<u8>>,
+        label: Option<&str>,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Arc<texture::Texture> {
+        let mut image = DynamicImage::new(img.width(), img.height(), image::ColorType::Rgba8);
+        for (x, y, pixel) in img.enumerate_pixels() {
+            image.put_pixel(x, y, *pixel);
+        }
+        Arc::new(texture::Texture::from_image(device, queue, &image, label))
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 /// Transformation of a element
 ///
 /// Element transformations are applied to the element and its children
@@ -740,12 +736,14 @@ impl ElementTransform {
     }
 }
 
+#[derive(Default)]
 pub struct Element<Msg>
 where
     Msg: Clone,
 {
+    text: Option<String>,
     pub label: Option<String>,
-    pub render_element: RenderElement,
+    pub render_element: Option<RenderElement>,
     pub styles: StyleSheet,
     pub event_listeners: HashMap<EventTypes, Msg>,
     pub children: Children,
@@ -757,10 +755,11 @@ impl<Msg> Element<Msg>
 where
     Msg: Clone,
 {
-    pub fn new(gui: &Gui<Msg>) -> Self {
+    pub fn new() -> Self {
         Self {
+            text: None,
             label: None,
-            render_element: RenderElement::zeroed(&gui.gpu.proxy),
+            render_element: None,
             styles: StyleSheet::default(),
             event_listeners: HashMap::new(),
             children: Children::None,
@@ -788,9 +787,99 @@ where
         self.children = children;
         self
     }
+
+    pub fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        if let None = self.render_element {
+            self.render_element = Some(RenderElement::zeroed(device))
+        }
+        let mut render_element = self.render_element.take().unwrap();
+        if self.styles.flags.dirty_texture {
+            if let Some(texture) = &self.styles.background.texture {
+                render_element.set_texture(texture.clone());
+            }
+
+            self.styles.flags.dirty_texture = false;
+        }
+        if self.styles.flags.dirty_color {
+            let color = self.styles.background.color;
+            render_element.set_color(color, queue, device);
+            self.styles.flags.dirty_color = false;
+        }
+        if self.styles.flags.dirty_transform {
+            let transform = &self.transform;
+            render_element.data.update_transform(transform);
+        }
+        if self.styles.flags.dirty_lin_gradient {
+            if let Some(grad) = &self.styles.background.lin_gradient {
+                match &mut render_element.linear_gradient {
+                    Some(lin) => {
+                        lin.from_style(grad);
+                        lin.write_all(queue);
+                    }
+                    _ => {
+                        let mut lin = RenderLinearGradient::zeroed(device);
+                        lin.from_style(grad);
+                        lin.write_all(queue);
+                        render_element.linear_gradient = Some(lin);
+                    }
+                }
+            }
+            self.styles.flags.dirty_lin_gradient = false;
+        }
+        if self.styles.flags.dirty_rad_gradient {
+            if let Some(grad) = &self.styles.background.rad_gradient {
+                match &mut render_element.radial_gradient {
+                    Some(rad) => {
+                        rad.from_style(grad);
+                        rad.write_all(queue);
+                    }
+                    _ => {
+                        let mut rad = RenderRadialGradient::zeroed(device);
+                        rad.from_style(grad);
+                        rad.write_all(queue);
+                        render_element.radial_gradient = Some(rad);
+                    }
+                }
+            }
+            self.styles.flags.dirty_rad_gradient = false;
+        }
+
+        render_element.write_all(queue);
+        self.render_element = Some(render_element)
+    }
+
+    pub fn text(&self) -> &Option<String> {
+        &self.text
+    }
+
+    pub fn text_mut(&mut self) -> &mut Option<String> {
+        &mut self.text
+    }
+
+    pub fn text_str(&mut self, str: &str) {
+        match &mut self.text {
+            Some(text) => {
+                *text = str.to_string();
+            }
+            None => {
+                self.text = Some(str.to_string());
+            }
+        }
+    }
+
+    pub fn text_string(&mut self, str: String) {
+        match &mut self.text {
+            Some(text) => {
+                *text = str;
+            }
+            None => {
+                self.text = Some(str);
+            }
+        }
+    }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum Children {
     Element(ElementKey),
     Layers(Vec<ElementKey>),
@@ -803,6 +892,7 @@ pub enum Children {
         spacing: Size,
     },
 
+    #[default]
     None,
 }
 

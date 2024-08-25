@@ -47,11 +47,11 @@ impl ApplicationHandler for App {
         let size = window.inner_size();
         let mut gui = Gui::new(size.into(), drawing.device.clone(), drawing.queue.clone());
 
-        let mut element = Element::new(&gui).with_label("hello element");
+        let mut element = Element::new().with_label("hello element");
         let styles = &mut element.styles;
         styles.transfomr_mut().max_width = Size::Percent(50.0);
         styles.transfomr_mut().max_height = Size::Percent(80.0);
-        styles.set_bg_color(Color::CYAN);
+        *styles.bg_color_mut() = Color::CYAN;
         let element_key = gui.add_element(element);
         gui.set_entry(Some(element_key));
 
@@ -84,6 +84,8 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
+                this.gui.update();
+                this.gui.prepare(&this.drawing.device, &this.drawing.queue);
                 this.drawing.draw(&mut this.gui);
             }
             _ => {}

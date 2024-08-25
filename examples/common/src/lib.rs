@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use winit::{application::ApplicationHandler, window};
 use rugui::Gui;
 
 
@@ -18,7 +17,9 @@ impl Drawing {
     pub async fn new(window: Arc<winit::window::Window>) -> Self {
         let size = window.inner_size();
 
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            ..Default::default()
+        });
 
         let surface = instance.create_surface(window.clone()).unwrap();
 
@@ -69,6 +70,9 @@ impl Drawing {
     }
 
     pub fn draw<Message: Clone>(&mut self, gui: &mut Gui<Message>) {
+        if self.size.0 == 0 || self.size.1 == 0 {
+            return;
+        }
         let output = self.surface.get_current_texture().unwrap();
         let view = output
             .texture
@@ -104,11 +108,13 @@ impl Drawing {
 }
 
 pub fn resize_event<Msg: Clone>(gui: &mut Gui<Msg>, drawing: &mut Drawing, size: (u32, u32)) {
-    gui.resize(size, &drawing.queue);
-
     drawing.config.width = size.0;
     drawing.config.height = size.1;
     drawing.size = (size.0, size.1);
+    if size.0 == 0 || size.1 == 0 {
+        return;
+    }
+    gui.resize(size, &drawing.queue);
     drawing
         .surface
         .configure(&drawing.device, &drawing.config);

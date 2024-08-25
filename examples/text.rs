@@ -1,13 +1,17 @@
 use std::sync::Arc;
 
 use examples_common::Drawing;
-use rugui::{render::Color, styles::Size, Element, Gui};
+use rugui::{
+    render::Color,
+    styles::{Size, Text},
+    Element, Gui,
+};
+use softfont::TextOptions;
 use winit::application::ApplicationHandler;
 
 extern crate examples_common;
 extern crate pollster;
 extern crate rugui;
-extern crate rugui_winit_events;
 extern crate wgpu;
 extern crate winit;
 
@@ -25,15 +29,9 @@ pub enum App {
 }
 
 pub struct Application {
-    gui: Gui<Messages>,
+    gui: Gui<()>,
     drawing: Drawing,
     window: Arc<winit::window::Window>,
-    events: rugui_winit_events::State,
-}
-
-#[derive(Clone)]
-pub enum Messages {
-    BoxHover,
 }
 
 impl ApplicationHandler for App {
@@ -42,7 +40,7 @@ impl ApplicationHandler for App {
             event_loop
                 .create_window(
                     winit::window::Window::default_attributes()
-                        .with_title("Events example")
+                        .with_title("Text example")
                         .with_visible(false),
                 )
                 .unwrap(),
@@ -55,26 +53,20 @@ impl ApplicationHandler for App {
         let mut gui = Gui::new(size.into(), drawing.device.clone(), drawing.queue.clone());
 
         let mut element = Element::new().with_label("hello element");
-        element
-            .event_listeners
-            .insert(rugui::events::EventTypes::MouseEnter, Messages::BoxHover);
-        element
-            .event_listeners
-            .insert(rugui::events::EventTypes::MouseLeave, Messages::BoxHover);
         let styles = &mut element.styles;
         styles.transfomr_mut().max_width = Size::Percent(50.0);
         styles.transfomr_mut().max_height = Size::Percent(80.0);
-        *styles.bg_color_mut() = Color::CYAN;
+        *styles.bg_color_mut() = Color::MAGENTA;
+
+        styles.text_mut().size = Size::Pixel(100.0);
+        element.text_str("Tři tisíce tři sta třicet tři stříbrných stříkaček stříkalo přes nevim.");
         let element_key = gui.add_element(element);
         gui.set_entry(Some(element_key));
-
-        let events = rugui_winit_events::State::new();
 
         *self = App::App(Application {
             gui,
             drawing,
             window,
-            events,
         });
     }
 
@@ -89,29 +81,6 @@ impl ApplicationHandler for App {
             App::Loading => return,
         };
 
-        if let Some(event) = this.events.event(&event) {
-            this.gui.event(event);
-        }
-
-        while let Some(message) = this.gui.poll_event() {
-            match message.msg {
-                Messages::BoxHover => {
-                    let element = this.gui.get_element_mut(message.key).unwrap();
-                    match message.event_type {
-                        rugui::events::EventTypes::MouseEnter => {
-                            let styles = &mut element.styles;
-                            *styles.bg_color_mut() = Color::RED.with_alpha(0.5);
-                        }
-                        rugui::events::EventTypes::MouseLeave => {
-                            let styles = &mut element.styles;
-                            *styles.bg_color_mut() = Color::RED;
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-
         match event {
             winit::event::WindowEvent::Resized(size) => {
                 if size.width <= 0 || size.height <= 0 {
@@ -123,15 +92,11 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
-                this.gui
-                    .resize(this.window.inner_size().into(), &this.drawing.queue);
                 this.gui.update();
                 this.gui.prepare(&this.drawing.device, &this.drawing.queue);
                 this.drawing.draw(&mut this.gui);
             }
             _ => {}
         }
-        this.window.request_redraw();
-        event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     }
 }

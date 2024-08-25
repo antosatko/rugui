@@ -2,3 +2,4 @@ target
 Cargo.lock
 test_app/target
 test_app/Cargo.lock
+softfont
