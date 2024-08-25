@@ -76,7 +76,7 @@ gui.set_entry(Some(entry));
 Handling window resizing is important for creating a responsive application. Here’s how you can handle resizing:
 
 ```rust
-fn handle_resize(gui: &mut Gui<Message>, new_size: (u32, u32)) {
+fn handle_resize(gui: &mut Gui<()>, new_size: (u32, u32)) {
     if new_size.0 > 0 && new_size.1 > 0 {
         gui.resize(new_size, &queue);
     }
@@ -90,7 +90,7 @@ fn handle_resize(gui: &mut Gui<Message>, new_size: (u32, u32)) {
 To render the GUI correctly, you must update the GUI state, prepare it for rendering, and then draw it:
 
 ```rust
-fn render_frame(gui: &mut Gui<Message>) {
+fn render_frame(gui: &mut Gui<()>) {
     // Update the GUI state
     gui.update();
 
