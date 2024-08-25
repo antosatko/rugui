@@ -81,7 +81,7 @@ pub struct Transform {
     pub padding: Size,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Flags {
     pub(crate) dirty_color: bool,
     pub(crate) dirty_texture: bool,
@@ -107,6 +107,12 @@ impl Default for Flags {
 
             recalc_transform: true,
         }
+    }
+}
+
+impl Clone for Flags {
+    fn clone(&self) -> Self {
+        Self::default()
     }
 }
 
@@ -419,6 +425,8 @@ pub enum Size {
     Percent(f32),
     AbsFill,
     AbsPercent(f32),
+    /*Inch(f32),
+    Cm(f32),*/
 }
 
 #[derive(Clone, Copy, Debug, Default)]

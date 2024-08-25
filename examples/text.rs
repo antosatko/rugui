@@ -2,11 +2,8 @@ use std::sync::Arc;
 
 use examples_common::Drawing;
 use rugui::{
-    render::Color,
-    styles::{Size, Text},
-    Element, Gui,
+    render::Color, styles::{Rotation, Size, Text}, Children, Element, Gui
 };
-use softfont::TextOptions;
 use winit::application::ApplicationHandler;
 
 extern crate examples_common;
@@ -56,10 +53,20 @@ impl ApplicationHandler for App {
         let styles = &mut element.styles;
         styles.transfomr_mut().max_width = Size::Percent(50.0);
         styles.transfomr_mut().max_height = Size::Percent(80.0);
+        styles.transfomr_mut().rotation = Rotation::Deg(25.0);
         *styles.bg_color_mut() = Color::MAGENTA;
 
         styles.text_mut().size = Size::Pixel(100.0);
-        element.text_str("Tři tisíce tři sta třicet tři stříbrných stříkaček stříkalo přes nevim.");
+        element.text_str("A rotated text looks pretty ugly, so maybe try to use it as little as possible.");
+
+        let mut small_box = Element::new();
+        small_box.text_str("This looks a lot better but still needs some improvements. I will look into that.👍");
+        small_box.styles.transfomr_mut().rotation = Rotation::AbsNone;
+        small_box.styles.transfomr_mut().margin = Size::Percent(40.0);
+        *small_box.styles.bg_color_mut() = Color::YELLOW;
+
+        element.children = Children::Element(gui.add_element(small_box));
+
         let element_key = gui.add_element(element);
         gui.set_entry(Some(element_key));
 
@@ -98,5 +105,7 @@ impl ApplicationHandler for App {
             }
             _ => {}
         }
+        this.window.request_redraw();
+        event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll)
     }
 }

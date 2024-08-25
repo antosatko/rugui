@@ -1,11 +1,10 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Instant};
 
+use cosmic_text::{Attrs, FontSystem, Metrics, SwashCache};
 use events::{EventPoll, EventResponse, EventTypes, WindowEvent};
 use image::{DynamicImage, GenericImage, ImageBuffer, Rgba};
 use nalgebra::Point2;
-use render::{
-    GpuBound, RenderElement, RenderLinearGradient, RenderRadialGradient,
-};
+use render::{GpuBound, RenderElement, RenderLinearGradient, RenderRadialGradient};
 use styles::{Size, StyleSheet};
 
 pub mod events;
@@ -24,6 +23,8 @@ where
     size: (u32, u32),
     gpu: GpuBound,
     input: InputState,
+    font_system: Option<FontSystem>,
+    swash_cache: Option<SwashCache>,
     pub debug: bool,
 }
 
@@ -63,6 +64,8 @@ where
             size,
             gpu,
             input: InputState::new(),
+            font_system: Some(FontSystem::new()),
+            swash_cache: Some(SwashCache::new()),
             debug: false,
         };
         this
@@ -384,7 +387,13 @@ where
         } else {
             return;
         };
-        self.traverse_elements_mut(*entry_key, &mut |e| e.write(device, queue))
+        let mut font = self.font_system.take().unwrap();
+        let mut swash = self.swash_cache.take().unwrap();
+        self.traverse_elements_mut(*entry_key, &mut |e| {
+            e.write(device, queue, &mut font, &mut swash)
+        });
+        self.font_system = Some(font);
+        self.swash_cache = Some(swash);
     }
 
     fn element_transform(&mut self, key: ElementKey, transform: &ElementTransform) {
@@ -741,12 +750,13 @@ pub struct Element<Msg>
 where
     Msg: Clone,
 {
-    text: Option<String>,
+    text: Option<(String, bool)>,
     pub label: Option<String>,
     pub render_element: Option<RenderElement>,
     pub styles: StyleSheet,
     pub event_listeners: HashMap<EventTypes, Msg>,
     pub children: Children,
+    text_buffer: Option<cosmic_text::Buffer>,
     transform: ElementTransform,
     parent: ElementTransform,
 }
@@ -763,6 +773,7 @@ where
             styles: StyleSheet::default(),
             event_listeners: HashMap::new(),
             children: Children::None,
+            text_buffer: None,
             transform: ElementTransform::zeroed(),
             parent: ElementTransform::zeroed(),
         }
@@ -788,7 +799,13 @@ where
         self
     }
 
-    pub fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+    pub fn write(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        font_system: &mut FontSystem,
+        swash_cache: &mut SwashCache,
+    ) {
         if let None = self.render_element {
             self.render_element = Some(RenderElement::zeroed(device))
         }
@@ -808,6 +825,10 @@ where
         if self.styles.flags.dirty_transform {
             let transform = &self.transform;
             render_element.data.update_transform(transform);
+            if let Some((_, flag)) = &mut self.text {
+                *flag = true;
+            }
+            self.styles.flags.dirty_transform = false;
         }
         if self.styles.flags.dirty_lin_gradient {
             if let Some(grad) = &self.styles.background.lin_gradient {
@@ -843,37 +864,122 @@ where
             }
             self.styles.flags.dirty_rad_gradient = false;
         }
+        match &mut self.text {
+            Some((txt, dirty)) => {
+                if *dirty {
+                    match &mut self.text_buffer {
+                        Some(tb) => {
+                            let mut tb = tb.borrow_with(font_system);
+                            tb.set_size(Some(self.transform.scale.x), Some(self.transform.scale.y));
+                            let attrs = Attrs::new();
+                            tb.set_text(&txt, attrs, cosmic_text::Shaping::Advanced);
+                            tb.shape_until_scroll(true);
+                            let color = self.styles.text.color;
+                            let color = cosmic_text::Color::rgb(
+                                (color.r * 255.0) as u8,
+                                (color.g * 255.0) as u8,
+                                (color.b * 255.0) as u8,
+                            );
+                            let mut image = DynamicImage::new(
+                                self.transform.scale.x as u32,
+                                self.transform.scale.y as u32,
+                                image::ColorType::Rgba8,
+                            );
+                            tb.draw(swash_cache, color, |x, y, w, h, color| {
+                                if x < 0
+                                    || y < 0
+                                    || x >= self.transform.scale.x as i32
+                                    || y >= self.transform.scale.y as i32
+                                {
+                                    return;
+                                }
+                                image.put_pixel(x as u32, y as u32, color.as_rgba().into())
+                            });
+                            self.text_buffer = Some(tb.clone());
+                            let tex = texture::Texture::from_image(device, queue, &image, None);
+                            render_element.text = Some(Arc::new(tex))
+                        }
+                        None => {
+                            let mut tb =
+                                cosmic_text::Buffer::new(font_system, Metrics::new(40.0, 43.0));
+                            let mut tb = tb.borrow_with(font_system);
+                            tb.set_size(Some(self.transform.scale.x), Some(self.transform.scale.y));
+                            let attrs = Attrs::new();
+                            tb.set_text(&txt, attrs, cosmic_text::Shaping::Advanced);
+                            tb.shape_until_scroll(true);
+                            let color = self.styles.text.color;
+                            let color = cosmic_text::Color::rgb(
+                                (color.r * 255.0) as u8,
+                                (color.g * 255.0) as u8,
+                                (color.b * 255.0) as u8,
+                            );
+                            let mut image = DynamicImage::new(
+                                self.transform.scale.x as u32,
+                                self.transform.scale.y as u32,
+                                image::ColorType::Rgba8,
+                            );
+                            tb.draw(swash_cache, color, |x, y, w, h, color| {
+                                if x < 0
+                                    || y < 0
+                                    || x >= self.transform.scale.x as i32
+                                    || y >= self.transform.scale.y as i32
+                                {
+                                    return;
+                                }
+                                image.put_pixel(x as u32, y as u32, color.as_rgba().into())
+                            });
+                            self.text_buffer = Some(tb.clone());
+                            let tex = texture::Texture::from_image(device, queue, &image, None);
+                            render_element.text = Some(Arc::new(tex))
+                        }
+                    }
+                    *dirty = false;
+                }
+            }
+            None => (),
+        }
 
         render_element.write_all(queue);
         self.render_element = Some(render_element)
     }
 
-    pub fn text(&self) -> &Option<String> {
-        &self.text
+    pub fn text(&self) -> Option<&String> {
+        match &self.text {
+            Some((str, _)) => Some(str),
+            None => None,
+        }
     }
 
-    pub fn text_mut(&mut self) -> &mut Option<String> {
-        &mut self.text
+    pub fn text_mut(&mut self) -> Option<&mut String> {
+        match &mut self.text {
+            Some((str, dirty)) => {
+                *dirty = true;
+                Some(str)
+            }
+            None => None,
+        }
     }
 
     pub fn text_str(&mut self, str: &str) {
         match &mut self.text {
-            Some(text) => {
+            Some((text, dirty)) => {
+                *dirty = true;
                 *text = str.to_string();
             }
             None => {
-                self.text = Some(str.to_string());
+                self.text = Some((str.to_string(), true));
             }
         }
     }
 
     pub fn text_string(&mut self, str: String) {
         match &mut self.text {
-            Some(text) => {
+            Some((text, dirty)) => {
+                *dirty = true;
                 *text = str;
             }
             None => {
-                self.text = Some(str);
+                self.text = Some((str, true));
             }
         }
     }
