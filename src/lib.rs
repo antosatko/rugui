@@ -3,7 +3,6 @@ use std::{collections::HashMap, sync::Arc};
 use cosmic_text::{Attrs, FontSystem, Metrics, SwashCache};
 use events::{ElementEvent, EventPoll, EventResponse, EventTypes, WindowEvent};
 use image::{DynamicImage, GenericImage, ImageBuffer, Rgba};
-use nalgebra::{Point2, Vector2};
 use render::{GpuBound, RenderElement, RenderLinearGradient, RenderRadialGradient};
 use styles::{Size, StyleSheet};
 
@@ -25,18 +24,30 @@ where
     input: InputState,
     font_system: Option<FontSystem>,
     swash_cache: Option<SwashCache>,
+    select: Select,
 }
 
 struct InputState {
-    pub(crate) mouse: Point2<f32>,
-    pub(crate) prev_mouse: Point2<f32>,
+    pub(crate) mouse: Point,
+    pub(crate) prev_mouse: Point,
+}
+
+pub struct Select {
+    pub selected: Option<ElementKey>,
+    pub selectables: Vec<ElementKey>
+}
+
+impl Select {
+    pub fn new() -> Self {
+        Self { selected: None, selectables: Vec::new() }
+    }
 }
 
 impl InputState {
     pub fn new() -> Self {
         Self {
-            mouse: Point2::new(0.0, 0.0),
-            prev_mouse: Point2::new(0.0, 0.0),
+            mouse: Point::new(0.0, 0.0),
+            prev_mouse: Point::new(0.0, 0.0),
         }
     }
 }
@@ -65,6 +76,7 @@ where
             input: InputState::new(),
             font_system: Some(FontSystem::new()),
             swash_cache: Some(SwashCache::new()),
+            select: Select::new(),
         };
         this
     }
@@ -99,8 +111,8 @@ where
         self.entry = key;
         if let Some(key) = key {
             let transform = ElementTransform {
-                position: Point2::new(self.size.0 as f32 / 2.0, self.size.1 as f32 / 2.0),
-                scale: Point2::new(self.size.0 as f32, self.size.1 as f32),
+                position: Point::new(self.size.0 as f32 / 2.0, self.size.1 as f32 / 2.0),
+                scale: Point::new(self.size.0 as f32, self.size.1 as f32),
                 rotation: 0.0,
             };
             self.element_transform(key, &transform);
@@ -340,8 +352,8 @@ where
         self.element_transform(
             *entry_key,
             &ElementTransform {
-                position: Point2::new(size.0 as f32 / 2.0, size.1 as f32 / 2.0),
-                scale: Point2::new(size.0 as f32, size.1 as f32),
+                position: Point::new(size.0 as f32 / 2.0, size.1 as f32 / 2.0),
+                scale: Point::new(size.0 as f32, size.1 as f32),
                 rotation: 0.0,
             },
         );
@@ -357,8 +369,8 @@ where
         self.element_transform(
             *entry_key,
             &ElementTransform {
-                position: Point2::new(self.size.0 as f32 / 2.0, self.size.1 as f32 / 2.0),
-                scale: Point2::new(self.size.0 as f32, self.size.1 as f32),
+                position: Point::new(self.size.0 as f32 / 2.0, self.size.1 as f32 / 2.0),
+                scale: Point::new(self.size.0 as f32, self.size.1 as f32),
                 rotation: 0.0,
             },
         );
@@ -423,8 +435,8 @@ where
                 styles::Rotation::AbsPercent(percent) => (percent / 50.0) * std::f32::consts::PI,
             };
             let transform = ElementTransform {
-                position: Point2::new(x, y),
-                scale: Point2::new(width, height),
+                position: Point::new(x, y),
+                scale: Point::new(width, height),
                 rotation,
             };
             let pre_collision = element.transform.point_collision(self.input.mouse);
@@ -486,7 +498,7 @@ where
                     ),
                 };
                 let transform = ElementTransform {
-                    scale: Point2::new(
+                    scale: Point::new(
                         transform.scale.x - pad_width,
                         transform.scale.y - pad_height,
                     ),
@@ -511,7 +523,7 @@ where
                     ),
                 };
                 let transform = ElementTransform {
-                    scale: Point2::new(
+                    scale: Point::new(
                         transform.scale.x - pad_width,
                         transform.scale.y - pad_height,
                     ),
@@ -546,15 +558,15 @@ where
                         Size::AbsPercent(space) => self.size.1 as f32 * (space / 100.),
                     };
                     let position = if transform.rotation == 0.0 {
-                        Point2::new(transform.position.x, y + space / 2.0)
+                        Point::new(transform.position.x, y + space / 2.0)
                     } else {
                         let pivot = transform.position;
-                        let point = Point2::new(transform.position.x, y + space / 2.0);
+                        let point = Point::new(transform.position.x, y + space / 2.0);
                         rotate_point(point, pivot, transform.rotation)
                     };
                     let transform = ElementTransform {
                         position,
-                        scale: Point2::new(transform.scale.x, space),
+                        scale: Point::new(transform.scale.x, space),
                         rotation: transform.rotation,
                     };
                     y += space;
@@ -588,15 +600,15 @@ where
                         Size::AbsPercent(space) => self.size.0 as f32 * (space / 100.),
                     };
                     let position = if transform.rotation == 0.0 {
-                        Point2::new(x + space / 2.0, transform.position.y)
+                        Point::new(x + space / 2.0, transform.position.y)
                     } else {
                         let pivot = transform.position;
-                        let point = Point2::new(x + space / 2.0, transform.position.y);
+                        let point = Point::new(x + space / 2.0, transform.position.y);
                         rotate_point(point, pivot, transform.rotation)
                     };
                     let transform = ElementTransform {
                         position,
-                        scale: Point2::new(space, transform.scale.y),
+                        scale: Point::new(space, transform.scale.y),
                         rotation: transform.rotation,
                     };
                     self.element_transform(element, &transform);
@@ -694,15 +706,15 @@ where
 /// or its parent is resized
 pub struct ElementTransform {
     /// Position in x and y of the top left corner
-    pub position: Point2<f32>,
+    pub position: Point,
     /// Scale in width and height
-    pub scale: Point2<f32>,
+    pub scale: Point,
     /// Rotation in radians
     pub rotation: f32,
 }
 
 impl ElementTransform {
-    pub fn new(position: Point2<f32>, scale: Point2<f32>, rotation: f32) -> Self {
+    pub fn new(position: Point, scale: Point, rotation: f32) -> Self {
         Self {
             position,
             scale,
@@ -712,13 +724,13 @@ impl ElementTransform {
 
     pub fn zeroed() -> Self {
         Self {
-            position: Point2::new(0.0, 0.0),
-            scale: Point2::new(0.0, 0.0),
+            position: Point::new(0.0, 0.0),
+            scale: Point::new(0.0, 0.0),
             rotation: 0.0,
         }
     }
 
-    pub fn point_collision(&self, point: Point2<f32>) -> bool {
+    pub fn point_collision(&self, point: Point) -> bool {
         let point_rotated = rotate_point(point, self.position, -self.rotation);
         let width = self.scale.x / 2.0;
         let height = self.scale.y / 2.0;
@@ -973,11 +985,11 @@ where
         }
     }
 
-    pub fn place_point(&self, point: Point2<f32>) -> Point2<f32> {
+    pub fn place_point(&self, point: Point) -> Point {
         let x = point.x - self.transform.position.x;
         let y = point.y - self.transform.position.y;
-        let point = Point2::new(x, y);
-        rotate_point(point, Point2::new(0.0, 0.0), -self.transform.rotation)
+        let point = Point::new(x, y);
+        rotate_point(point, Point::new(0.0, 0.0), -self.transform.rotation)
     }
 }
 
@@ -1004,7 +1016,7 @@ pub struct Section {
     pub size: Size,
 }
 
-fn rotate_point(point: Point2<f32>, pivot: Point2<f32>, angle: f32) -> Point2<f32> {
+fn rotate_point(point: Point, pivot: Point, angle: f32) -> Point {
     let sin = angle.sin();
     let cos = angle.cos();
     let translated_x = point.x - pivot.x;
@@ -1013,5 +1025,18 @@ fn rotate_point(point: Point2<f32>, pivot: Point2<f32>, angle: f32) -> Point2<f3
     let rotated_x = translated_x * cos - translated_y * sin;
     let rotated_y = translated_x * sin + translated_y * cos;
 
-    Point2::new(rotated_x + pivot.x, rotated_y + pivot.y)
+    Point::new(rotated_x + pivot.x, rotated_y + pivot.y)
+}
+
+
+#[derive(Debug, Copy, Clone, Default)]
+pub struct Point {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl Point {
+    pub fn new(x: f32, y: f32) -> Self {
+        Self { x, y }
+    }
 }

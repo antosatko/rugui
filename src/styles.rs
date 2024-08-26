@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bytemuck::Zeroable;
-use nalgebra::{Point2, Vector2};
+use crate::Point;
 
 use crate::{render::Color, texture::Texture};
 #[derive(Debug, Clone)]
@@ -371,7 +371,7 @@ pub enum Position {
 }
 
 impl Position {
-    pub fn normalized(&self, scale: Point2<f32>) -> [f32; 2] {
+    pub fn normalized(&self, scale: Point) -> [f32; 2] {
         match self {
             Position::Top => [0.5, 0.0],
             Position::TopLeft => [0.0, 0.0],

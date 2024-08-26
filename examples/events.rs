@@ -58,11 +58,9 @@ impl ApplicationHandler for App {
             .event_listeners
             .insert(rugui::events::EventTypes::MouseMove, Messages::BoxHover);
         let styles = &mut element.styles;
-        styles.transfomr_mut().max_width = Size::Percent(50.0);
-        styles.transfomr_mut().max_height = Size::Percent(80.0);
         styles.set_bg_rad_gradient(Some(RadialGradient {
             center: rugui::styles::ColorPoint { position: rugui::styles::Position::Center, color: Color::BLACK },
-            radius: rugui::styles::ColorPoint { position: rugui::styles::Position::Top, color: Color::RED }
+            radius: rugui::styles::ColorPoint { position: rugui::styles::Position::Top, color: Color::RED.with_alpha(0.0) }
         }));
         let element_key = gui.add_element(element);
         gui.set_entry(Some(element_key));
@@ -93,16 +91,11 @@ impl ApplicationHandler for App {
             match message.msg {
                 Messages::BoxHover => {
                     let element = this.gui.get_element_mut(message.key).unwrap();
-                    match message.event_type {
-                        rugui::events::EventTypes::MouseMove => {
-                            let mouse = if let ElementEvent::MouseMove { position, last } = message.element_event {
-                                position
-                            } else {
-                                continue;
-                            };
+                    match message.element_event {
+                        ElementEvent::MouseMove { position, .. } => {
                             let styles = &mut element.styles;
                             let mut grad = styles.get_bg_rad_gradient().unwrap();
-                            grad.center.position = Position::Custom(Size::Pixel(mouse.x), Size::Pixel(mouse.y));
+                            grad.center.position = Position::Custom(Size::Pixel(position.x), Size::Pixel(position.y));
                             styles.set_bg_rad_gradient(Some(grad));
                         }
                         _ => {}

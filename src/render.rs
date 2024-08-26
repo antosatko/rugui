@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use nalgebra::Point2;
+use crate::Point;
 use wgpu::include_wgsl;
 
 use crate::{
@@ -864,8 +864,8 @@ impl RenderElementData {
         self.rotation = transform.rotation;
     }
 
-    pub fn point_collision(&self, point: Point2<f32>) -> bool {
-        let rotated_point = Point2::new(
+    pub fn point_collision(&self, point: Point) -> bool {
+        let rotated_point = Point::new(
             (point.x - self.center[0]) * self.rotation.cos()
                 - (point.y - self.center[1]) * self.rotation.sin(),
             (point.x - self.center[0]) * self.rotation.sin()

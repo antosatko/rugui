@@ -1,6 +1,4 @@
-use nalgebra::{Point2, Vector2};
-
-use crate::{Element, ElementKey, InputState};
+use crate::{Point, Element, ElementKey, InputState};
 
 #[derive(Debug, Clone)]
 pub enum MouseButton {
@@ -17,9 +15,9 @@ pub enum WindowEvent {
     /// A mouse button was released
     MouseUp { button: MouseButton },
     /// The mouse was moved
-    MouseMove { position: Point2<f32>, last: Point2<f32> },
+    MouseMove { position: Point, last: Point },
     /// The mouse wheel was scrolled
-    Scroll { delta: Point2<f32> },
+    Scroll { delta: Point },
     /// Logical key press
     ///
     /// This event considers the current keyboard layout and modifiers
@@ -31,17 +29,17 @@ pub enum ElementEvent {
     /// A mouse button was clicked
     MouseDown { 
         button: MouseButton,
-        position: Point2<f32>,
+        position: Point,
     },
     /// A mouse button was released
     MouseUp { 
         button: MouseButton,
-        position: Point2<f32>,
+        position: Point,
     },
     /// The mouse was moved
-    MouseMove { position: Point2<f32>, last: Point2<f32> },
+    MouseMove { position: Point, last: Point },
     /// The mouse wheel was scrolled
-    Scroll { delta: Point2<f32>, position: Point2<f32> },
+    Scroll { delta: Point, position: Point },
     /// Logical key press
     ///
     /// This event considers the current keyboard layout and modifiers

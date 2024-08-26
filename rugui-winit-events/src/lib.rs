@@ -1,4 +1,4 @@
-use nalgebra::Point2;
+use rugui::Point;
 use rugui::events::WindowEvent as RuguiWindowEvent;
 use winit::{event::WindowEvent as WinitWindowEvent, keyboard::Key};
 pub fn event(event: &WinitWindowEvent) -> Option<RuguiWindowEvent> {
@@ -18,8 +18,8 @@ pub fn event(event: &WinitWindowEvent) -> Option<RuguiWindowEvent> {
             device_id,
             position,
         } => Some(RuguiWindowEvent::MouseMove {
-            position: Point2::new(position.x as f32, position.y as f32),
-            last: Point2::new(position.x as f32, position.y as f32),
+            position: Point::new(position.x as f32, position.y as f32),
+            last: Point::new(position.x as f32, position.y as f32),
         }),
         WinitWindowEvent::MouseWheel {
             device_id,
@@ -27,9 +27,9 @@ pub fn event(event: &WinitWindowEvent) -> Option<RuguiWindowEvent> {
             phase,
         } => {
             let delta = match delta {
-                winit::event::MouseScrollDelta::LineDelta(x, y) => Point2::new(*x, *y),
+                winit::event::MouseScrollDelta::LineDelta(x, y) => Point::new(*x, *y),
                 winit::event::MouseScrollDelta::PixelDelta(delta) => {
-                    Point2::new(delta.x as f32, delta.y as f32)
+                    Point::new(delta.x as f32, delta.y as f32)
                 }
             };
             Some(RuguiWindowEvent::Scroll { delta })

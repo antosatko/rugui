@@ -25,7 +25,7 @@ impl Drawing {
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
+                power_preference: wgpu::PowerPreference::LowPower,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
@@ -38,7 +38,7 @@ impl Drawing {
                     label: Some("Device"),
                     required_features: wgpu::Features::empty(),
                     required_limits: wgpu::Limits::default(),
-                    memory_hints: wgpu::MemoryHints::Performance,
+                    memory_hints: wgpu::MemoryHints::MemoryUsage,
                 },
                 None,
             )
