@@ -31,6 +31,11 @@ pub struct StyleSheet {
     /// If false, the element and its children will not be rendered
     pub(crate) visible: bool,
 
+    /// Hint for the gui engine that this element can be selected for keyboard input
+    /// 
+    /// This allows the element to be selected using tab/arrows (if not consumed)
+    pub selectable: bool,
+
     pub(crate) flags: Flags,
 }
 
@@ -156,6 +161,7 @@ impl Default for StyleSheet {
             },
             text: Text::default(),
             visible: true,
+            selectable: false,
             flags: Flags::default(),
         }
     }
