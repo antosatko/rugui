@@ -134,19 +134,18 @@ Running in release mode ensures smoother performance, especially for more comple
 
 ## Troubleshooting
 
-**1. GUI Not Rendering Properly**
+### 1. GUI Not Rendering Properly
 
 - Ensure that your `wgpu` setup is correct and the device, queue, and surface configuration are properly initialized.
 - Check if the `Gui` object has been correctly prepared and updated before rendering.
 
-**2. Resize Events Not Handled**
+### 2. Resize Events Not Handled
 
 - Verify that you are calling the `handle_resize` function correctly in your event loop and that the `gui.resize` method is being invoked with the updated window size.
 
-**3. Performance Issues**
+### 3. Performance Issues
 
 - Make sure you are running examples in release mode for optimal performance. Use `cargo run --release` to avoid debug mode overhead.
 - Check for any unnecessary computations or excessive updates in your event handling and rendering code.
 
 For more detailed troubleshooting, please refer to the [rugui GitHub Issues page](https://github.com/it-2001/rugui/issues) or the [discussion forum](https://github.com/it-2001/rugui/issues).
-

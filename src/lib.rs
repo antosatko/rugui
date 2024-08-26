@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::{collections::HashMap, sync::Arc};
 
 use cosmic_text::{Attrs, FontSystem, Metrics, SwashCache};
 use events::{EventPoll, EventResponse, EventTypes, WindowEvent};
@@ -25,7 +25,6 @@ where
     input: InputState,
     font_system: Option<FontSystem>,
     swash_cache: Option<SwashCache>,
-    pub debug: bool,
 }
 
 struct InputState {
@@ -66,7 +65,6 @@ where
             input: InputState::new(),
             font_system: Some(FontSystem::new()),
             swash_cache: Some(SwashCache::new()),
-            debug: false,
         };
         this
     }

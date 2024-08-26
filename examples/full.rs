@@ -56,8 +56,7 @@ impl ApplicationHandler for App {
         );
         let drawing = pollster::block_on(Drawing::new(window.clone()));
         let mut gui: Gui<Message> =
-            Gui::new((800, 600), drawing.device.as_ref(), drawing.queue.as_ref());
-        gui.debug = true;
+            Gui::new((800, 600), &drawing.device, &drawing.queue);
 
         let texture = Arc::new(rugui::texture::Texture::from_bytes(
             &drawing.device,

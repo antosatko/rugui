@@ -45,7 +45,7 @@ impl ApplicationHandler for App {
         window.set_visible(true);
 
         let size = window.inner_size();
-        let mut gui = Gui::new(size.into(), drawing.device.as_ref(), drawing.queue.as_ref());
+        let mut gui = Gui::new(size.into(), &drawing.device, &drawing.queue);
 
         let mut element = Element::new().with_label("hello element");
         let styles = &mut element.styles;
