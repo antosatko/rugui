@@ -5,7 +5,7 @@ use wgpu::include_wgsl;
 
 use crate::{
     styles::{LinearGradient, RadialGradient},
-    texture::Texture,
+    texture::Texture, ElementTransform,
 };
 
 pub struct GpuBound {
@@ -511,17 +511,17 @@ impl RenderRadialGradient {
         );
     }
 
-    pub fn from_style(&mut self, style: &RadialGradient) {
-        self.center = style.p1.position.normalized();
-        self.center_color = style.p1.color;
+    pub fn from_style(&mut self, style: &RadialGradient, transform: &ElementTransform) {
+        self.center = style.center.position.normalized(transform.scale);
+        self.center_color = style.center.color;
         self.radius = {
             let p1 = self.center;
-            let p2 = style.p2.position.normalized();
+            let p2 = style.radius.position.normalized(transform.scale);
             let a = p2[0] - p1[0];
             let b = p2[1] - p1[1];
             f32::sqrt(a * a + b * b)
         };
-        self.outer_color = style.p2.color;
+        self.outer_color = style.radius.color;
     }
 }
 
@@ -726,10 +726,10 @@ impl RenderLinearGradient {
         queue.write_buffer(&self.end_buffer, 0, bytemuck::cast_slice(&[self.end]));
     }
 
-    pub fn from_style(&mut self, style: &LinearGradient) {
-        self.start = style.p1.position.normalized();
+    pub fn from_style(&mut self, style: &LinearGradient, transform: &ElementTransform) {
+        self.start = style.p1.position.normalized(transform.scale);
         self.start_color = style.p1.color;
-        self.end = style.p2.position.normalized();
+        self.end = style.p2.position.normalized(transform.scale);
         self.end_color = style.p2.color;
     }
 }

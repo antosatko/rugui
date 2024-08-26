@@ -93,11 +93,11 @@ impl ApplicationHandler for App {
         }));
         let mut column2 = Element::new().with_label("row2 column2");
         column2.styles.set_bg_rad_gradient(Some(RadialGradient {
-            p1: ColorPoint {
+            center: ColorPoint {
                 position: Position::Center,
                 color: Color::RED,
             },
-            p2: ColorPoint {
+            radius: ColorPoint {
                 position: Position::Top,
                 color: Color::GREEN,
             },

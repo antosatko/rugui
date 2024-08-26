@@ -33,7 +33,6 @@ struct Application {
     window: Arc<winit::window::Window>,
     t: f32,
     start: std::time::Instant,
-    events: rugui_winit_events::State,
     rotation: bool,
 }
 
@@ -111,11 +110,11 @@ impl ApplicationHandler for App {
         let column2_styles = &mut column2.styles;
         column2_styles.transfomr_mut().rotation = Rotation::None;
         column2_styles.set_bg_rad_gradient(Some(RadialGradient {
-            p1: ColorPoint {
+            center: ColorPoint {
                 position: Position::Center,
                 color: Color::YELLOW,
             },
-            p2: ColorPoint {
+            radius: ColorPoint {
                 position: Position::Top,
                 color: Color::WHITE.with_alpha(0.0),
             },
@@ -203,7 +202,6 @@ impl ApplicationHandler for App {
             window,
             t: 0.0,
             start: std::time::Instant::now(),
-            events: rugui_winit_events::State::new(),
             rotation: false,
         };
         *self = App::App(this);
@@ -220,7 +218,7 @@ impl ApplicationHandler for App {
             App::Loading => return,
         };
 
-        match this.events.event(&event) {
+        match rugui_winit_events::event(&event) {
             Some(event) => {
                 this.gui.event(event);
             }

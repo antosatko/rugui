@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use bytemuck::Zeroable;
+use nalgebra::{Point2, Vector2};
 
 use crate::{render::Color, texture::Texture};
 #[derive(Debug, Clone)]
@@ -370,7 +371,7 @@ pub enum Position {
 }
 
 impl Position {
-    pub fn normalized(&self) -> [f32; 2] {
+    pub fn normalized(&self, scale: Point2<f32>) -> [f32; 2] {
         match self {
             Position::Top => [0.5, 0.0],
             Position::TopLeft => [0.0, 0.0],
@@ -383,12 +384,12 @@ impl Position {
             Position::Center => [0.5, 0.5],
             Position::Custom(x, y) => {
                 let x = match x {
-                    Size::Pixel(x) => *x,
+                    Size::Pixel(x) => (*x + scale.x *0.5) / scale.x,
                     Size::Percent(percent) => *percent / 100.0,
                     _ => 0.5,
                 };
                 let y = match y {
-                    Size::Pixel(y) => *y,
+                    Size::Pixel(y) => (*y + scale.y *0.5) / scale.y,
                     Size::Percent(percent) => *percent / 100.0,
                     _ => 0.5,
                 };
@@ -490,6 +491,6 @@ pub struct LinearGradient {
 
 #[derive(Debug, Clone, Default)]
 pub struct RadialGradient {
-    pub p1: ColorPoint,
-    pub p2: ColorPoint,
+    pub center: ColorPoint,
+    pub radius: ColorPoint,
 }

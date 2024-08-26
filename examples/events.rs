@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use examples_common::Drawing;
-use rugui::{render::Color, styles::Size, Element, Gui};
+use rugui::{events::ElementEvent, render::Color, styles::{Position, RadialGradient, Size}, Element, Gui};
 use winit::application::ApplicationHandler;
 
 extern crate examples_common;
@@ -28,7 +28,6 @@ pub struct Application {
     gui: Gui<Messages>,
     drawing: Drawing,
     window: Arc<winit::window::Window>,
-    events: rugui_winit_events::State,
 }
 
 #[derive(Clone)]
@@ -57,24 +56,21 @@ impl ApplicationHandler for App {
         let mut element = Element::new().with_label("hello element");
         element
             .event_listeners
-            .insert(rugui::events::EventTypes::MouseEnter, Messages::BoxHover);
-        element
-            .event_listeners
-            .insert(rugui::events::EventTypes::MouseLeave, Messages::BoxHover);
+            .insert(rugui::events::EventTypes::MouseMove, Messages::BoxHover);
         let styles = &mut element.styles;
         styles.transfomr_mut().max_width = Size::Percent(50.0);
         styles.transfomr_mut().max_height = Size::Percent(80.0);
-        *styles.bg_color_mut() = Color::CYAN;
+        styles.set_bg_rad_gradient(Some(RadialGradient {
+            center: rugui::styles::ColorPoint { position: rugui::styles::Position::Center, color: Color::BLACK },
+            radius: rugui::styles::ColorPoint { position: rugui::styles::Position::Top, color: Color::RED }
+        }));
         let element_key = gui.add_element(element);
         gui.set_entry(Some(element_key));
-
-        let events = rugui_winit_events::State::new();
 
         *self = App::App(Application {
             gui,
             drawing,
             window,
-            events,
         });
     }
 
@@ -89,7 +85,7 @@ impl ApplicationHandler for App {
             App::Loading => return,
         };
 
-        if let Some(event) = this.events.event(&event) {
+        if let Some(event) = rugui_winit_events::event(&event) {
             this.gui.event(event);
         }
 
@@ -98,13 +94,16 @@ impl ApplicationHandler for App {
                 Messages::BoxHover => {
                     let element = this.gui.get_element_mut(message.key).unwrap();
                     match message.event_type {
-                        rugui::events::EventTypes::MouseEnter => {
+                        rugui::events::EventTypes::MouseMove => {
+                            let mouse = if let ElementEvent::MouseMove { position, last } = message.element_event {
+                                position
+                            } else {
+                                continue;
+                            };
                             let styles = &mut element.styles;
-                            *styles.bg_color_mut() = Color::RED.with_alpha(0.5);
-                        }
-                        rugui::events::EventTypes::MouseLeave => {
-                            let styles = &mut element.styles;
-                            *styles.bg_color_mut() = Color::RED;
+                            let mut grad = styles.get_bg_rad_gradient().unwrap();
+                            grad.center.position = Position::Custom(Size::Pixel(mouse.x), Size::Pixel(mouse.y));
+                            styles.set_bg_rad_gradient(Some(grad));
                         }
                         _ => {}
                     }

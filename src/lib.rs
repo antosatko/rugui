@@ -1,9 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
 use cosmic_text::{Attrs, FontSystem, Metrics, SwashCache};
-use events::{EventPoll, EventResponse, EventTypes, WindowEvent};
+use events::{ElementEvent, EventPoll, EventResponse, EventTypes, WindowEvent};
 use image::{DynamicImage, GenericImage, ImageBuffer, Rgba};
-use nalgebra::Point2;
+use nalgebra::{Point2, Vector2};
 use render::{GpuBound, RenderElement, RenderLinearGradient, RenderRadialGradient};
 use styles::{Size, StyleSheet};
 
@@ -28,8 +28,8 @@ where
 }
 
 struct InputState {
-    mouse: Point2<f32>,
-    prev_mouse: Point2<f32>,
+    pub(crate) mouse: Point2<f32>,
+    pub(crate) prev_mouse: Point2<f32>,
 }
 
 impl InputState {
@@ -119,7 +119,7 @@ where
         };
         while let Some(event) = self.events.queue.pop() {
             match &event {
-                WindowEvent::MouseMove { position } => {
+                WindowEvent::MouseMove { position, last } => {
                     self.input.prev_mouse = self.input.mouse;
                     self.input.mouse = *position;
                 }
@@ -183,7 +183,8 @@ where
                     if let Some(msg) = element.event_listeners.get(&EventTypes::MouseDown) {
                         self.events.events.push(events::Event {
                             event_type: EventTypes::MouseDown,
-                            event: event.clone(),
+                            window_event: event.clone(),
+                            element_event: ElementEvent::from_window_event(event, &element, &self.input),
                             msg: msg.clone(),
                             key,
                         });
@@ -196,7 +197,8 @@ where
                     if let Some(msg) = element.event_listeners.get(&EventTypes::MouseUp) {
                         self.events.events.push(events::Event {
                             event_type: EventTypes::MouseUp,
-                            event: event.clone(),
+                            window_event: event.clone(),
+                            element_event: ElementEvent::from_window_event(event, &element, &self.input),
                             msg: msg.clone(),
                             key,
                         });
@@ -216,26 +218,6 @@ where
                     todo!();
                 }
             }
-            WindowEvent::SelectNext => {
-                if let Some(msg) = element.event_listeners.get(&EventTypes::SelectNext) {
-                    self.events.events.push(events::Event {
-                        event_type: EventTypes::SelectNext,
-                        event: event.clone(),
-                        msg: msg.clone(),
-                        key,
-                    });
-                }
-            }
-            WindowEvent::SelectPrevious => {
-                if let Some(msg) = element.event_listeners.get(&EventTypes::SelectPrevious) {
-                    self.events.events.push(events::Event {
-                        event_type: EventTypes::SelectPrevious,
-                        event: event.clone(),
-                        msg: msg.clone(),
-                        key,
-                    });
-                }
-            }
             events::WindowEvent::MouseMove { .. } => {
                 let position = self.input.mouse;
                 let prev = self.input.prev_mouse;
@@ -248,7 +230,8 @@ where
                         if let Some(msg) = element.event_listeners.get(&EventTypes::MouseEnter) {
                             self.events.events.push(events::Event {
                                 event_type: EventTypes::MouseEnter,
-                                event: event.clone(),
+                                window_event: event.clone(),
+                                element_event: ElementEvent::from_window_event(event, &element, &self.input),
                                 msg: msg.clone(),
                                 key,
                             });
@@ -258,7 +241,8 @@ where
                         if let Some(msg) = element.event_listeners.get(&EventTypes::MouseLeave) {
                             self.events.events.push(events::Event {
                                 event_type: EventTypes::MouseLeave,
-                                event: event.clone(),
+                                window_event: event.clone(),
+                                element_event: ElementEvent::from_window_event(event, &element, &self.input),
                                 msg: msg.clone(),
                                 key,
                             });
@@ -270,7 +254,8 @@ where
                     if let Some(msg) = element.event_listeners.get(&EventTypes::MouseMove) {
                         self.events.events.push(events::Event {
                             event_type: EventTypes::MouseMove,
-                            event: event.clone(),
+                            window_event: event.clone(),
+                            element_event: ElementEvent::from_window_event(event, &element, &self.input),
                             msg: msg.clone(),
                             key,
                         });
@@ -452,11 +437,14 @@ where
             match (pre_collision, post_collision) {
                 (true, false) => {
                     if let Some(msg) = element.event_listeners.get(&EventTypes::MouseLeave) {
+                        let event = WindowEvent::MouseMove {
+                            position: self.input.mouse,
+                            last: self.input.prev_mouse
+                        };
                         self.events.events.push(events::Event {
                             event_type: EventTypes::MouseLeave,
-                            event: WindowEvent::MouseMove {
-                                position: self.input.mouse,
-                            },
+                            element_event: ElementEvent::from_window_event(&event, &element, &self.input),
+                            window_event: event,
                             msg: msg.clone(),
                             key,
                         });
@@ -464,11 +452,14 @@ where
                 }
                 (false, true) => {
                     if let Some(msg) = element.event_listeners.get(&EventTypes::MouseEnter) {
+                        let event = WindowEvent::MouseMove {
+                            position: self.input.mouse,
+                            last: self.input.prev_mouse
+                        };
                         self.events.events.push(events::Event {
                             event_type: EventTypes::MouseEnter,
-                            event: WindowEvent::MouseMove {
-                                position: self.input.mouse,
-                            },
+                            element_event: ElementEvent::from_window_event(&event, &element, &self.input),
+                            window_event: event,
                             msg: msg.clone(),
                             key,
                         });
@@ -832,12 +823,12 @@ where
             if let Some(grad) = &self.styles.background.lin_gradient {
                 match &mut render_element.linear_gradient {
                     Some(lin) => {
-                        lin.from_style(grad);
+                        lin.from_style(grad, &self.transform);
                         lin.write_all(queue);
                     }
                     _ => {
                         let mut lin = RenderLinearGradient::zeroed(device);
-                        lin.from_style(grad);
+                        lin.from_style(grad, &self.transform);
                         lin.write_all(queue);
                         render_element.linear_gradient = Some(lin);
                     }
@@ -849,12 +840,12 @@ where
             if let Some(grad) = &self.styles.background.rad_gradient {
                 match &mut render_element.radial_gradient {
                     Some(rad) => {
-                        rad.from_style(grad);
+                        rad.from_style(grad, &self.transform);
                         rad.write_all(queue);
                     }
                     _ => {
                         let mut rad = RenderRadialGradient::zeroed(device);
-                        rad.from_style(grad);
+                        rad.from_style(grad, &self.transform);
                         rad.write_all(queue);
                         render_element.radial_gradient = Some(rad);
                     }
@@ -980,6 +971,13 @@ where
                 self.text = Some((str, true));
             }
         }
+    }
+
+    pub fn place_point(&self, point: Point2<f32>) -> Point2<f32> {
+        let x = point.x - self.transform.position.x;
+        let y = point.y - self.transform.position.y;
+        let point = Point2::new(x, y);
+        rotate_point(point, Point2::new(0.0, 0.0), -self.transform.rotation)
     }
 }
 
