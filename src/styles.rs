@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use bytemuck::Zeroable;
 use crate::Point;
+use bytemuck::Zeroable;
 
 use crate::{render::Color, texture::Texture};
 #[derive(Debug, Clone)]
@@ -32,7 +32,7 @@ pub struct StyleSheet {
     pub(crate) visible: bool,
 
     /// Hint for the gui engine that this element can be selected for keyboard input
-    /// 
+    ///
     /// This allows the element to be selected using tab/arrows (if not consumed)
     pub selectable: bool,
 
@@ -85,6 +85,27 @@ pub struct Transform {
     ///
     /// Not implemented yet
     pub padding: Size,
+    /// Performs rounding operation for the position of the element
+    /// 
+    /// Use this with scale_round to render with pixel precision
+    pub position_round: Round,
+    /// Performs rounding operation for the scale of the element
+    /// 
+    /// Use this with position_round to render with pixel precision
+    pub scale_round: Round,
+    /// Performs rounding operation for the rotation of the element
+    /// 
+    /// This will alwas force element into right angles
+    pub rotation_round: Round,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Round {
+    Ceil,
+    Round,
+    Floor,
+    #[default]
+    None
 }
 
 #[derive(Debug)]
@@ -137,6 +158,9 @@ impl Default for StyleSheet {
                 min_height: Size::None,
                 margin: Size::None,
                 padding: Size::None,
+                position_round: Default::default(),
+                scale_round: Default::default(),
+                rotation_round: Default::default(),
             },
             background: Background {
                 color: Color::zeroed(),
@@ -197,7 +221,13 @@ impl StyleSheet {
             Size::AbsPercent(percent) => window_width * (percent / 100.),
             _ => 0.0,
         };
-        (w - margin).min(max).max(min)
+        let result = (w - margin).min(max).max(min);
+        match self.transform.scale_round {
+            Round::Ceil => result.ceil(),
+            Round::Round => result.round(),
+            Round::Floor => result.floor(),
+            Round::None => result,
+        }
     }
 
     pub fn get_height(&self, parent_height: f32, window_height: f32) -> f32 {
@@ -229,7 +259,13 @@ impl StyleSheet {
             Size::AbsPercent(percent) => window_height * (percent / 100.),
             _ => 0.0,
         };
-        (h - margin).min(max).max(min)
+        let result = (h - margin).min(max).max(min);
+        match self.transform.scale_round {
+            Round::Ceil => result.ceil(),
+            Round::Round => result.round(),
+            Round::Floor => result.floor(),
+            Round::None => result,
+        }
     }
 
     pub fn get_x(&self, parent_x: f32, parent_width: f32, width: f32) -> f32 {
@@ -258,7 +294,13 @@ impl StyleSheet {
             },
         };
 
-        x + align
+        let result = x + align;
+        match self.transform.scale_round {
+            Round::Ceil => result.ceil(),
+            Round::Round => result.round(),
+            Round::Floor => result.floor(),
+            Round::None => result,
+        }
     }
 
     pub fn get_y(&self, parent_y: f32, parent_height: f32, height: f32) -> f32 {
@@ -285,7 +327,13 @@ impl StyleSheet {
             },
         };
 
-        y + align
+        let result = y + align;
+        match self.transform.scale_round {
+            Round::Ceil => result.ceil(),
+            Round::Round => result.round(),
+            Round::Floor => result.floor(),
+            Round::None => result,
+        }
     }
 
     pub fn get_transform(&self) -> &Transform {
@@ -390,12 +438,12 @@ impl Position {
             Position::Center => [0.5, 0.5],
             Position::Custom(x, y) => {
                 let x = match x {
-                    Size::Pixel(x) => (*x + scale.x *0.5) / scale.x,
+                    Size::Pixel(x) => (*x + scale.x * 0.5) / scale.x,
                     Size::Percent(percent) => *percent / 100.0,
                     _ => 0.5,
                 };
                 let y = match y {
-                    Size::Pixel(y) => (*y + scale.y *0.5) / scale.y,
+                    Size::Pixel(y) => (*y + scale.y * 0.5) / scale.y,
                     Size::Percent(percent) => *percent / 100.0,
                     _ => 0.5,
                 };

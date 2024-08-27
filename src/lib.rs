@@ -874,7 +874,6 @@ where
                             tb.set_size(Some(self.transform.scale.x), Some(self.transform.scale.y));
                             let attrs = Attrs::new();
                             tb.set_text(&txt, attrs, cosmic_text::Shaping::Advanced);
-                            tb.shape_until_scroll(true);
                             let color = self.styles.text.color;
                             let color = cosmic_text::Color::rgb(
                                 (color.r * 255.0) as u8,
@@ -902,7 +901,7 @@ where
                         }
                         None => {
                             let mut tb =
-                                cosmic_text::Buffer::new(font_system, Metrics::new(40.0, 43.0));
+                                cosmic_text::Buffer::new(font_system, Metrics::new(21.0, 23.0));
                             let mut tb = tb.borrow_with(font_system);
                             tb.set_size(Some(self.transform.scale.x), Some(self.transform.scale.y));
                             let attrs = Attrs::new();

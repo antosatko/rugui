@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use examples_common::Drawing;
 use rugui::{
-    render::Color, styles::{Rotation, Size, Text}, Children, Element, Gui
+    render::Color, styles::{Rotation, Round, Size, Text}, Children, Element, Gui
 };
 use winit::application::ApplicationHandler;
 
@@ -63,6 +63,8 @@ impl ApplicationHandler for App {
         small_box.text_str("This looks a lot better but still needs some improvements. I will look into that.👍");
         small_box.styles.transfomr_mut().rotation = Rotation::AbsNone;
         small_box.styles.transfomr_mut().margin = Size::Percent(40.0);
+        small_box.styles.transfomr_mut().position_round = Round::Round;
+        small_box.styles.transfomr_mut().scale_round = Round::Round;
         *small_box.styles.bg_color_mut() = Color::YELLOW;
 
         element.children = Children::Element(gui.add_element(small_box));
