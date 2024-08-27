@@ -168,6 +168,7 @@ impl ApplicationHandler for App {
             a: 0.3,
         };
         columns_styles.transfomr_mut().rotation = Rotation::None;
+        columns_styles.z_index = 0; // try to change it to different values
 
         let card = gui.add_element(columns);
         row2.children = Children::Element(card);

@@ -35,16 +35,23 @@ pub struct StyleSheet {
     ///
     /// This allows the element to be selected using tab/arrows (if not consumed)
     pub selectable: bool,
+    pub z_index: i32,
 
     pub(crate) flags: Flags,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Text {
-    pub size: Size,
+    pub size: f32,
+    pub line_height: f32,
     pub color: Color,
     pub justify: Position,
-    pub fit: bool,
+}
+
+impl Default for Text {
+    fn default() -> Self {
+        Self { size: 20.0, line_height: 23.0, color: Color::default(), justify: Position::default() }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -187,6 +194,7 @@ impl Default for StyleSheet {
             visible: true,
             selectable: false,
             flags: Flags::default(),
+            z_index: 0,
         }
     }
 }
@@ -405,6 +413,13 @@ impl StyleSheet {
 
     pub fn set_visible(&mut self, visible: bool) {
         self.visible = visible;
+    }
+
+    pub fn resize_text(&mut self, size: f32) {
+        let lines = self.text.line_height - self.text.size;
+        self.text.size = size;
+        self.text.line_height = size + lines;
+        self.flags.dirty_text = true;
     }
 }
 

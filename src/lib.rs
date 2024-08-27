@@ -25,6 +25,7 @@ where
     font_system: Option<FontSystem>,
     swash_cache: Option<SwashCache>,
     select: Select,
+    ordered: Vec<ElementKey>,
 }
 
 struct InputState {
@@ -34,12 +35,15 @@ struct InputState {
 
 pub struct Select {
     pub selected: Option<ElementKey>,
-    pub selectables: Vec<ElementKey>
+    pub selectables: Vec<ElementKey>,
 }
 
 impl Select {
     pub fn new() -> Self {
-        Self { selected: None, selectables: Vec::new() }
+        Self {
+            selected: None,
+            selectables: Vec::new(),
+        }
     }
 }
 
@@ -77,6 +81,7 @@ where
             font_system: Some(FontSystem::new()),
             swash_cache: Some(SwashCache::new()),
             select: Select::new(),
+            ordered: Vec::new(),
         };
         this
     }
@@ -135,6 +140,121 @@ where
                     self.input.prev_mouse = self.input.mouse;
                     self.input.mouse = *position;
                 }
+                WindowEvent::SelectNext => match &self.select.selected {
+                    Some(selected) => {
+                        let len = if self.select.selectables.len() == 0 {
+                            continue;
+                        } else {
+                            self.select.selectables.len()
+                        };
+                        let msg = if let Some(element) = self.get_element(*selected) {
+                            match element.event_listeners.get(&EventTypes::Select) {
+                                Some(m) => m.clone(),
+                                None => return,
+                            }
+                        } else {
+                            return;
+                        };
+                        match self.select.selectables.iter().position(|k| k == selected) {
+                            Some(i) => {
+                                if i + 1 >= len {
+                                    self.events.events.push(events::Event {
+                                        event_type: EventTypes::Select,
+                                        window_event: WindowEvent::SelectNext,
+                                        element_event: ElementEvent::Unselect,
+                                        msg,
+                                        key: *selected,
+                                    });
+                                    self.select.selected = None;
+                                } else {
+                                    self.events.events.push(events::Event {
+                                        event_type: EventTypes::Select,
+                                        window_event: WindowEvent::SelectNext,
+                                        element_event: ElementEvent::Unselect,
+                                        msg,
+                                        key: *selected,
+                                    });
+                                    self.select.selected = Some(self.select.selectables[i + 1]);
+                                    let msg = if let Some(element) =
+                                        self.get_element(self.select.selectables[i + 1])
+                                    {
+                                        match element.event_listeners.get(&EventTypes::Select) {
+                                            Some(m) => m.clone(),
+                                            None => return,
+                                        }
+                                    } else {
+                                        return;
+                                    };
+                                    self.events.events.push(events::Event {
+                                        event_type: EventTypes::Select,
+                                        window_event: WindowEvent::SelectNext,
+                                        element_event: ElementEvent::Select,
+                                        msg,
+                                        key: self.select.selectables[i + 1],
+                                    });
+                                }
+                            }
+                            None => match self.select.selectables.first() {
+                                Some(key) => {
+                                    self.events.events.push(events::Event {
+                                        event_type: EventTypes::Select,
+                                        window_event: WindowEvent::SelectNext,
+                                        element_event: ElementEvent::Select,
+                                        msg,
+                                        key: *selected,
+                                    });
+                                    self.select.selected = Some(*key);
+                                    let msg = if let Some(element) = self.get_element(*key) {
+                                        match element.event_listeners.get(&EventTypes::Select) {
+                                            Some(m) => m.clone(),
+                                            None => return,
+                                        }
+                                    } else {
+                                        return;
+                                    };
+                                    self.events.events.push(events::Event {
+                                        event_type: EventTypes::Select,
+                                        window_event: WindowEvent::SelectNext,
+                                        element_event: ElementEvent::Select,
+                                        msg,
+                                        key: *key,
+                                    });
+                                }
+                                None => {
+                                    self.events.events.push(events::Event {
+                                        event_type: EventTypes::Select,
+                                        window_event: WindowEvent::SelectNext,
+                                        element_event: ElementEvent::Unselect,
+                                        msg,
+                                        key: *selected,
+                                    });
+                                    self.select.selected = None;
+                                }
+                            },
+                        }
+                    }
+                    None => match self.select.selectables.first() {
+                        Some(key) => {
+                            self.select.selected = Some(*key);
+                            let msg = if let Some(element) = self.get_element(*key) {
+                                match element.event_listeners.get(&EventTypes::Select) {
+                                    Some(m) => m.clone(),
+                                    None => return,
+                                }
+                            } else {
+                                return;
+                            };
+                            self.events.events.push(events::Event {
+                                event_type: EventTypes::Select,
+                                window_event: WindowEvent::SelectNext,
+                                element_event: ElementEvent::Select,
+                                msg,
+                                key: *key,
+                            });
+                        }
+                        None => (),
+                    },
+                },
                 _ => {}
             }
             self.element_event(entry_key, &event);
@@ -196,7 +316,11 @@ where
                         self.events.events.push(events::Event {
                             event_type: EventTypes::MouseDown,
                             window_event: event.clone(),
-                            element_event: ElementEvent::from_window_event(event, &element, &self.input),
+                            element_event: ElementEvent::from_window_event(
+                                event,
+                                &element,
+                                &self.input,
+                            ),
                             msg: msg.clone(),
                             key,
                         });
@@ -210,7 +334,11 @@ where
                         self.events.events.push(events::Event {
                             event_type: EventTypes::MouseUp,
                             window_event: event.clone(),
-                            element_event: ElementEvent::from_window_event(event, &element, &self.input),
+                            element_event: ElementEvent::from_window_event(
+                                event,
+                                &element,
+                                &self.input,
+                            ),
                             msg: msg.clone(),
                             key,
                         });
@@ -243,7 +371,11 @@ where
                             self.events.events.push(events::Event {
                                 event_type: EventTypes::MouseEnter,
                                 window_event: event.clone(),
-                                element_event: ElementEvent::from_window_event(event, &element, &self.input),
+                                element_event: ElementEvent::from_window_event(
+                                    event,
+                                    &element,
+                                    &self.input,
+                                ),
                                 msg: msg.clone(),
                                 key,
                             });
@@ -254,7 +386,11 @@ where
                             self.events.events.push(events::Event {
                                 event_type: EventTypes::MouseLeave,
                                 window_event: event.clone(),
-                                element_event: ElementEvent::from_window_event(event, &element, &self.input),
+                                element_event: ElementEvent::from_window_event(
+                                    event,
+                                    &element,
+                                    &self.input,
+                                ),
                                 msg: msg.clone(),
                                 key,
                             });
@@ -267,7 +403,11 @@ where
                         self.events.events.push(events::Event {
                             event_type: EventTypes::MouseMove,
                             window_event: event.clone(),
-                            element_event: ElementEvent::from_window_event(event, &element, &self.input),
+                            element_event: ElementEvent::from_window_event(
+                                event,
+                                &element,
+                                &self.input,
+                            ),
                             msg: msg.clone(),
                             key,
                         });
@@ -361,32 +501,91 @@ where
 
     pub fn update(&mut self) {
         self.resolve_events();
-        let entry_key = if let Some(entry) = &self.entry {
+        let entry_key = if let Some(entry) = self.entry {
             entry
         } else {
             return;
         };
         self.element_transform(
-            *entry_key,
+            entry_key,
             &ElementTransform {
                 position: Point::new(self.size.0 as f32 / 2.0, self.size.1 as f32 / 2.0),
                 scale: Point::new(self.size.0 as f32, self.size.1 as f32),
                 rotation: 0.0,
             },
         );
+        self.ordered.clear();
+        self.select.selectables.clear();
+        self.order(entry_key);
+        let mut ordered = self.ordered.clone();
+        ordered.sort_by(|a, b| {
+            self.get_element(*a)
+                .map(|e| e.styles.z_index)
+                .unwrap_or(0)
+                .cmp(&self.get_element(*b).map(|e| e.styles.z_index).unwrap_or(0))
+        });
+        self.ordered = ordered;
     }
 
-    pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        let entry_key = if let Some(entry) = &self.entry {
-            entry
+    fn order(&mut self, key: ElementKey) {
+        let element = if let Some(element) = self.get_element(key) {
+            if !element.styles.visible {
+                return;
+            }
+            element
         } else {
             return;
         };
+        if element.styles.selectable {
+            self.select.selectables.push(key);
+        }
+        self.ordered.push(key);
+        let element = if let Some(element) = self.get_element(key) {
+            element
+        } else {
+            return;
+        };
+        match &element.children {
+            Children::Element(key) => self.order(*key),
+            Children::Layers(layers) => {
+                let keys = layers.clone();
+                for key in keys {
+                    self.order(key);
+                }
+            }
+            Children::Rows {
+                children,
+                spacing: _,
+            } => {
+                let keys = children.clone();
+                for Section { element, .. } in keys {
+                    self.order(element);
+                }
+            }
+            Children::Columns {
+                children,
+                spacing: _,
+            } => {
+                let keys = children.clone();
+                for Section { element, .. } in keys {
+                    self.order(element);
+                }
+            }
+            Children::None => (),
+        }
+    }
+
+    pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
         let mut font = self.font_system.take().unwrap();
         let mut swash = self.swash_cache.take().unwrap();
-        self.traverse_elements_mut(*entry_key, &mut |e| {
+        for i in 0..self.ordered.len() {
+            let e = if let Some(e) = self.get_element_mut(self.ordered[i]) {
+                e
+            } else {
+                continue;
+            };
             e.write(device, queue, &mut font, &mut swash)
-        });
+        }
         self.font_system = Some(font);
         self.swash_cache = Some(swash);
     }
@@ -451,11 +650,15 @@ where
                     if let Some(msg) = element.event_listeners.get(&EventTypes::MouseLeave) {
                         let event = WindowEvent::MouseMove {
                             position: self.input.mouse,
-                            last: self.input.prev_mouse
+                            last: self.input.prev_mouse,
                         };
                         self.events.events.push(events::Event {
                             event_type: EventTypes::MouseLeave,
-                            element_event: ElementEvent::from_window_event(&event, &element, &self.input),
+                            element_event: ElementEvent::from_window_event(
+                                &event,
+                                &element,
+                                &self.input,
+                            ),
                             window_event: event,
                             msg: msg.clone(),
                             key,
@@ -466,11 +669,15 @@ where
                     if let Some(msg) = element.event_listeners.get(&EventTypes::MouseEnter) {
                         let event = WindowEvent::MouseMove {
                             position: self.input.mouse,
-                            last: self.input.prev_mouse
+                            last: self.input.prev_mouse,
                         };
                         self.events.events.push(events::Event {
                             event_type: EventTypes::MouseEnter,
-                            element_event: ElementEvent::from_window_event(&event, &element, &self.input),
+                            element_event: ElementEvent::from_window_event(
+                                &event,
+                                &element,
+                                &self.input,
+                            ),
                             window_event: event,
                             msg: msg.clone(),
                             key,
@@ -632,7 +839,14 @@ where
         };
         pass.set_bind_group(0, &self.gpu.dimensions_bind_group, &[]);
 
-        self.render_element(*entry_key, pass);
+        //self.render_element(*entry_key, pass);
+        for e in self.ordered.iter().cloned() {
+            if let Some(e) = self.get_element(e) {
+                if let Some(re) = &e.render_element {
+                    re.render(&self.gpu.pipelines, pass)
+                }
+            }
+        }
     }
 
     fn render_element<'a>(&'a self, key: ElementKey, pass: &mut wgpu::RenderPass<'a>) {
@@ -871,6 +1085,10 @@ where
                     match &mut self.text_buffer {
                         Some(tb) => {
                             let mut tb = tb.borrow_with(font_system);
+                            tb.set_metrics(Metrics::new(
+                                self.styles.text.size,
+                                self.styles.text.line_height,
+                            ));
                             tb.set_size(Some(self.transform.scale.x), Some(self.transform.scale.y));
                             let attrs = Attrs::new();
                             tb.set_text(&txt, attrs, cosmic_text::Shaping::Advanced);
@@ -900,8 +1118,10 @@ where
                             render_element.text = Some(Arc::new(tex))
                         }
                         None => {
-                            let mut tb =
-                                cosmic_text::Buffer::new(font_system, Metrics::new(21.0, 23.0));
+                            let mut tb = cosmic_text::Buffer::new(
+                                font_system,
+                                Metrics::new(self.styles.text.size, self.styles.text.line_height),
+                            );
                             let mut tb = tb.borrow_with(font_system);
                             tb.set_size(Some(self.transform.scale.x), Some(self.transform.scale.y));
                             let attrs = Attrs::new();
@@ -1026,7 +1246,6 @@ fn rotate_point(point: Point, pivot: Point, angle: f32) -> Point {
 
     Point::new(rotated_x + pivot.x, rotated_y + pivot.y)
 }
-
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct Point {

@@ -22,6 +22,8 @@ pub enum WindowEvent {
     ///
     /// This event considers the current keyboard layout and modifiers
     Input { text: String },
+    SelectNext,
+    SelectPrev,
 }
 
 #[derive(Debug, Clone)]
@@ -44,6 +46,8 @@ pub enum ElementEvent {
     ///
     /// This event considers the current keyboard layout and modifiers
     Input { text: String },
+    Select,
+    Unselect,
 }
 
 impl ElementEvent {
@@ -54,6 +58,8 @@ impl ElementEvent {
             WindowEvent::MouseMove { .. } => ElementEvent::MouseMove { position: element.place_point(inputs.mouse), last: element.place_point(inputs.prev_mouse) },
             WindowEvent::Scroll { delta } => ElementEvent::Scroll { delta: delta.clone(), position: element.place_point(inputs.mouse) },
             WindowEvent::Input { text } => ElementEvent::Input { text: text.clone() },
+            WindowEvent::SelectNext => unreachable!("ble ble contact the developer"),
+            WindowEvent::SelectPrev => unreachable!("ble ble contact the developer"),
         }
     }
 }
@@ -67,8 +73,7 @@ pub enum EventTypes {
     MouseLeave,
     Scroll,
     Input,
-    SelectNext,
-    SelectPrevious,
+    Select,
 }
 
 /// Element response to an event

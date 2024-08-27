@@ -1,6 +1,6 @@
 use rugui::Point;
 use rugui::events::WindowEvent as RuguiWindowEvent;
-use winit::{event::WindowEvent as WinitWindowEvent, keyboard::Key};
+use winit::{event::{ElementState, WindowEvent as WinitWindowEvent}, keyboard::Key};
 pub fn event(event: &WinitWindowEvent) -> Option<RuguiWindowEvent> {
     match event {
         WinitWindowEvent::MouseInput {
@@ -42,7 +42,12 @@ pub fn event(event: &WinitWindowEvent) -> Option<RuguiWindowEvent> {
             Key::Character(c) => Some(RuguiWindowEvent::Input {
                 text: c.to_string(),
             }),
-            _ => None,
+            Key::Named(winit::keyboard::NamedKey::Tab) => if event.state == ElementState::Pressed {
+                Some(RuguiWindowEvent::SelectNext)
+            } else {
+                None
+            }
+            _ => None
         },
         _ => None,
     }
