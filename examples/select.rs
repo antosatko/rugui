@@ -59,7 +59,12 @@ impl ApplicationHandler for App {
 
         let mut rows = Element::new().with_label("rows");
         let mut row1 = create_select("row1");
+        row1.text_str("Good job!");
+        row1.styles.resize_text(50.0);
         let mut row2 = Element::new().with_label("row2");
+        row2.text_str("Try pressing Tab..");
+        row2.styles.text_mut().color = Color::WHITE;
+        row2.styles.resize_text(50.0);
         let mut row3 = create_select("row3");
         let mut row4 = create_select("row4");
         let mut row5 = Element::new().with_label("row5");
@@ -144,6 +149,7 @@ impl ApplicationHandler for App {
                 rugui::events::ElementEvent::Unselect => {
                     if let Some(element) = this.gui.get_element_mut(event.key) {
                         *element.styles.bg_color_mut() = Color::BLACK;
+                        element.text_str("")
                     }
                     this.window.request_redraw();
                 }
