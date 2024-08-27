@@ -1,5 +1,5 @@
-use rugui::Point;
-use rugui::events::WindowEvent as RuguiWindowEvent;
+use crate::Point;
+use crate::events::WindowEvent as RuguiWindowEvent;
 use winit::{event::{ElementState, WindowEvent as WinitWindowEvent}, keyboard::Key};
 pub fn event(event: &WinitWindowEvent) -> Option<RuguiWindowEvent> {
     match event {
@@ -53,11 +53,11 @@ pub fn event(event: &WinitWindowEvent) -> Option<RuguiWindowEvent> {
     }
 }
 
-fn convert_mouse_button(button: winit::event::MouseButton) -> Option<rugui::events::MouseButton> {
+fn convert_mouse_button(button: winit::event::MouseButton) -> Option<crate::events::MouseButton> {
     match button {
-        winit::event::MouseButton::Left => Some(rugui::events::MouseButton::Left),
-        winit::event::MouseButton::Right => Some(rugui::events::MouseButton::Right),
-        winit::event::MouseButton::Middle => Some(rugui::events::MouseButton::Middle),
+        winit::event::MouseButton::Left => Some(crate::events::MouseButton::Left),
+        winit::event::MouseButton::Right => Some(crate::events::MouseButton::Right),
+        winit::event::MouseButton::Middle => Some(crate::events::MouseButton::Middle),
         _ => None,
     }
 }

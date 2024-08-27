@@ -8,10 +8,24 @@ bytemuck = {version = "1.16.3", features = ["derive"]}
 cosmic-text = "0.12.1"
 image = "0.25.2"
 wgpu = "22.1.0"
+winit = { version = "0.30.5", optional = true }
 
+[features]
+winit = ["dep:winit"]
 
 [dev-dependencies]
 winit = "0.30.5"
 examples-common = { path = "examples/common" }
 pollster = "0.3.0"
-rugui-winit-events = { path = "rugui-winit-events" }
+
+[[example]]
+name = "select"
+required-features = ["winit"]
+
+[[example]]
+name = "events"
+required-features = ["winit"]
+
+[[example]]
+name = "full"
+required-features = ["winit"]

@@ -130,6 +130,12 @@ To run these examples, it's recommended to run them in release mode, as some of 
 cargo run --release --example hello
 ```
 
+Some examples may require additional features. For example, the `full.rs` example uses the `winit` feature, which can be enabled as follows:
+
+```bash
+cargo run --release --example full --features winit
+```
+
 Running in release mode ensures smoother performance, especially for more complex examples.
 
 ## Troubleshooting

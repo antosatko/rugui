@@ -10,6 +10,8 @@ pub mod events;
 pub mod render;
 pub mod styles;
 pub mod texture;
+#[cfg(feature = "winit")]
+pub mod winit;
 
 pub struct Gui<Msg>
 where

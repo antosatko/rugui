@@ -1,3 +1,5 @@
+
+
 use std::sync::Arc;
 
 use examples_common::Drawing;
@@ -133,11 +135,10 @@ impl ApplicationHandler for App {
         };
 
         this.gui.update();
-        match rugui_winit_events::event(&event) {
+        match rugui::winit::event(&event) {
             Some(event) => this.gui.event(event),
             None => (),
         }
-        //println!("event: {:?}", event);
         while let Some(event) = this.gui.poll_event() {
             match event.element_event {
                 rugui::events::ElementEvent::Select => {

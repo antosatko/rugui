@@ -1,8 +1,0 @@
-[package]
-name = "rugui-winit-events"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-rugui = { path = ".." }
-winit = "0.30.5"

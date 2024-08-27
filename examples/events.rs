@@ -7,7 +7,6 @@ use winit::application::ApplicationHandler;
 extern crate examples_common;
 extern crate pollster;
 extern crate rugui;
-extern crate rugui_winit_events;
 extern crate wgpu;
 extern crate winit;
 
@@ -83,7 +82,7 @@ impl ApplicationHandler for App {
             App::Loading => return,
         };
 
-        if let Some(event) = rugui_winit_events::event(&event) {
+        if let Some(event) = rugui::winit::event(&event) {
             this.gui.event(event);
         }
 

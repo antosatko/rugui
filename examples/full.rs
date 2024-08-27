@@ -219,7 +219,7 @@ impl ApplicationHandler for App {
             App::Loading => return,
         };
 
-        match rugui_winit_events::event(&event) {
+        match rugui::winit::event(&event) {
             Some(event) => {
                 this.gui.event(event);
             }
