@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use examples_common::Drawing;
 use rugui::{
-    render::Color, styles::{Rotation, Round, Size, Text}, Children, Element, Gui
+    styles::{Rotation, Round, Size, Color}, Children, Element, Gui
 };
 use winit::application::ApplicationHandler;
 
@@ -82,7 +82,7 @@ impl ApplicationHandler for App {
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
-        window_id: winit::window::WindowId,
+        _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
         let this = match self {

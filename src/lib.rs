@@ -1,18 +1,32 @@
-use std::{collections::HashMap, sync::Arc};
+//! Heya!
+//!
+//! ## Feature flags
+#![doc = document_features::document_features!(feature_label = r#"<span class="stab portability"><code>{feature}</code></span>"#)]
 
+use std::{
+    collections::HashMap,
+    sync::Arc,
+};
+
+#[cfg(feature = "clipboard")]
+use clipboard::{ClipboardContext, ClipboardProvider};
 use cosmic_text::{Attrs, FontSystem, Metrics, SwashCache};
-use events::{ElementEvent, EventPoll, EventResponse, EventTypes, WindowEvent};
-use image::{DynamicImage, GenericImage, ImageBuffer, Rgba};
+use events::{ElementEvent, EventPoll, EventTypes, WindowEvent};
+use image::{DynamicImage, GenericImage};
 use render::{GpuBound, RenderElement, RenderLinearGradient, RenderRadialGradient};
 use styles::{Size, StyleSheet};
 
 pub mod events;
-pub mod render;
+mod render;
 pub mod styles;
 pub mod texture;
 #[cfg(feature = "winit")]
 pub mod winit;
 
+
+/// Context for the GUI engine
+/// 
+/// Always have only one in your application in order to save resources.
 pub struct Gui<Msg>
 where
     Msg: Clone,
@@ -28,14 +42,18 @@ where
     swash_cache: Option<SwashCache>,
     select: Select,
     ordered: Vec<ElementKey>,
+    #[cfg(feature = "clipboard")]
+    clipboard_ctx: Option<ClipboardContext>,
 }
 
 struct InputState {
     pub(crate) mouse: Point,
     pub(crate) prev_mouse: Point,
+    pub(crate) hover: Option<ElementKey>,
+    pub(crate) control_pressed: bool,
 }
 
-pub struct Select {
+pub(crate) struct Select {
     pub selected: Option<ElementKey>,
     pub selectables: Vec<ElementKey>,
 }
@@ -54,10 +72,13 @@ impl InputState {
         Self {
             mouse: Point::new(0.0, 0.0),
             prev_mouse: Point::new(0.0, 0.0),
+            hover: None,
+            control_pressed: false,
         }
     }
 }
 
+/// Key helps you access elements managed by the `Gui`
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub struct ElementKey {
     id: u64,
@@ -84,6 +105,8 @@ where
             swash_cache: Some(SwashCache::new()),
             select: Select::new(),
             ordered: Vec::new(),
+            #[cfg(feature = "clipboard")]
+            clipboard_ctx: ClipboardContext::new().ok(),
         };
         this
     }
@@ -130,90 +153,193 @@ where
         self.events.queue.push(event);
     }
 
+    fn fix_hovers(&mut self, event: &events::WindowEvent) {
+        let this_hover = self.find_hovered_element();
+        if self.input.hover != this_hover {
+            match self.input.hover {
+                Some(key) => {
+                    if let Some(e) = self.get_element(key) {
+                        let element_event = ElementEvent::from_window_event(event, e, &self.input);
+                        if let Some(listeners) = e.events.get(&EventTypes::MouseLeave) {
+                            for EventListener { msg, .. } in listeners {
+                                self.events.events.push(events::Event {
+                                    event_type: EventTypes::MouseLeave,
+                                    window_event: event.clone(),
+                                    element_event: element_event.clone(),
+                                    msg,
+                                    key,
+                                })
+                            }
+                        }
+                    }
+                }
+                None => (),
+            }
+            match this_hover {
+                Some(key) => {
+                    if let Some(e) = self.get_element(key) {
+                        let element_event = ElementEvent::from_window_event(&event, e, &self.input);
+                        if let Some(listeners) = e.events.get(&EventTypes::MouseEnter) {
+                            for EventListener { msg, .. } in listeners {
+                                self.events.events.push(events::Event {
+                                    event_type: EventTypes::MouseEnter,
+                                    window_event: event.clone(),
+                                    element_event: element_event.clone(),
+                                    msg,
+                                    key,
+                                })
+                            }
+                        }
+                    }
+                }
+                None => (),
+            }
+        }
+        self.input.hover = this_hover;
+    }
+
+    fn find_hovered_element(&self) -> Option<ElementKey> {
+        for key in self.ordered.iter().rev() {
+            let element = if let Some(e) = self.get_element(*key) {
+                e
+            } else {
+                continue;
+            };
+            if element.transform.point_collision(self.input.mouse) {
+                return Some(*key);
+            }
+        }
+        None
+    }
+
     fn resolve_events(&mut self) {
-        let entry_key = if let Some(entry) = self.entry {
-            entry
-        } else {
-            return;
-        };
         while let Some(event) = self.events.queue.pop() {
             match &event {
-                WindowEvent::MouseMove { position, last } => {
+                WindowEvent::MouseMove { position, .. } => {
                     self.input.prev_mouse = self.input.mouse;
                     self.input.mouse = *position;
+
+                    self.fix_hovers(&event)
                 }
-                WindowEvent::SelectNext => match &self.select.selected {
-                    Some(selected) => {
-                        let len = if self.select.selectables.len() == 0 {
-                            continue;
-                        } else {
-                            self.select.selectables.len()
-                        };
-                        let msg = if let Some(element) = self.get_element(*selected) {
-                            match element.event_listeners.get(&EventTypes::Select) {
-                                Some(m) => m.clone(),
-                                None => return,
-                            }
-                        } else {
-                            return;
-                        };
-                        match self.select.selectables.iter().position(|k| k == selected) {
-                            Some(i) => {
-                                if i + 1 >= len {
-                                    self.events.events.push(events::Event {
-                                        event_type: EventTypes::Select,
-                                        window_event: WindowEvent::SelectNext,
-                                        element_event: ElementEvent::Unselect,
-                                        msg,
-                                        key: *selected,
-                                    });
-                                    self.select.selected = None;
-                                } else {
-                                    self.events.events.push(events::Event {
-                                        event_type: EventTypes::Select,
-                                        window_event: WindowEvent::SelectNext,
-                                        element_event: ElementEvent::Unselect,
-                                        msg,
-                                        key: *selected,
-                                    });
-                                    self.select.selected = Some(self.select.selectables[i + 1]);
-                                    let msg = if let Some(element) =
-                                        self.get_element(self.select.selectables[i + 1])
-                                    {
-                                        match element.event_listeners.get(&EventTypes::Select) {
-                                            Some(m) => m.clone(),
-                                            None => return,
-                                        }
-                                    } else {
-                                        return;
-                                    };
-                                    self.events.events.push(events::Event {
-                                        event_type: EventTypes::Select,
-                                        window_event: WindowEvent::SelectNext,
-                                        element_event: ElementEvent::Select,
-                                        msg,
-                                        key: self.select.selectables[i + 1],
-                                    });
+                WindowEvent::SelectNext => {
+                    match &self.select.selected {
+                        Some(selected) => {
+                            let len = if self.select.selectables.len() == 0 {
+                                continue;
+                            } else {
+                                self.select.selectables.len()
+                            };
+                            let listeners = if let Some(element) = self.get_element(*selected) {
+                                match element.events.get(&EventTypes::Select) {
+                                    Some(m) => m.clone(),
+                                    None => return,
                                 }
-                            }
-                            None => match self.select.selectables.first() {
-                                Some(key) => {
-                                    self.events.events.push(events::Event {
-                                        event_type: EventTypes::Select,
-                                        window_event: WindowEvent::SelectNext,
-                                        element_event: ElementEvent::Select,
-                                        msg,
-                                        key: *selected,
-                                    });
-                                    self.select.selected = Some(*key);
-                                    let msg = if let Some(element) = self.get_element(*key) {
-                                        match element.event_listeners.get(&EventTypes::Select) {
-                                            Some(m) => m.clone(),
-                                            None => return,
+                            } else {
+                                return;
+                            };
+                            match self.select.selectables.iter().position(|k| k == selected) {
+                                Some(i) => {
+                                    if i + 1 >= len {
+                                        for EventListener { msg, .. } in listeners {
+                                            self.events.events.push(events::Event {
+                                                event_type: EventTypes::Select,
+                                                window_event: WindowEvent::SelectNext,
+                                                element_event: ElementEvent::Unselect,
+                                                msg,
+                                                key: *selected,
+                                            });
                                         }
+                                        self.select.selected = None;
                                     } else {
-                                        return;
-                                    };
+                                        for EventListener { msg, .. } in listeners {
+                                            self.events.events.push(events::Event {
+                                                event_type: EventTypes::Select,
+                                                window_event: WindowEvent::SelectNext,
+                                                element_event: ElementEvent::Unselect,
+                                                msg,
+                                                key: *selected,
+                                            });
+                                        }
+                                        self.select.selected = Some(self.select.selectables[i + 1]);
+                                        let listeners = if let Some(element) =
+                                            self.get_element(self.select.selectables[i + 1])
+                                        {
+                                            match element.events.get(&EventTypes::Select) {
+                                                Some(m) => m.clone(),
+                                                None => return,
+                                            }
+                                        } else {
+                                            return;
+                                        };
+                                        for EventListener { msg, .. } in listeners {
+                                            self.events.events.push(events::Event {
+                                                event_type: EventTypes::Select,
+                                                window_event: WindowEvent::SelectNext,
+                                                element_event: ElementEvent::Select,
+                                                msg,
+                                                key: self.select.selectables[i + 1],
+                                            });
+                                        }
+                                    }
+                                }
+                                None => match self.select.selectables.first() {
+                                    Some(key) => {
+                                        for EventListener { msg, .. } in listeners {
+                                            self.events.events.push(events::Event {
+                                                event_type: EventTypes::Select,
+                                                window_event: WindowEvent::SelectNext,
+                                                element_event: ElementEvent::Select,
+                                                msg,
+                                                key: *selected,
+                                            });
+                                        }
+                                        self.select.selected = Some(*key);
+                                        let listeners =
+                                            if let Some(element) = self.get_element(*key) {
+                                                match element.events.get(&EventTypes::Select) {
+                                                    Some(m) => m.clone(),
+                                                    None => return,
+                                                }
+                                            } else {
+                                                return;
+                                            };
+                                        for EventListener { msg, .. } in listeners {
+                                            self.events.events.push(events::Event {
+                                                event_type: EventTypes::Select,
+                                                window_event: WindowEvent::SelectNext,
+                                                element_event: ElementEvent::Select,
+                                                msg,
+                                                key: *key,
+                                            });
+                                        }
+                                    }
+                                    None => {
+                                        for EventListener { msg, .. } in listeners {
+                                            self.events.events.push(events::Event {
+                                                event_type: EventTypes::Select,
+                                                window_event: WindowEvent::SelectNext,
+                                                element_event: ElementEvent::Unselect,
+                                                msg,
+                                                key: *selected,
+                                            });
+                                        }
+                                        self.select.selected = None;
+                                    }
+                                },
+                            }
+                        }
+                        None => match self.select.selectables.first() {
+                            Some(key) => {
+                                self.select.selected = Some(*key);
+                                let listeners = if let Some(element) = self.get_element(*key) {
+                                    match element.events.get(&EventTypes::Select) {
+                                        Some(m) => m.clone(),
+                                        None => return,
+                                    }
+                                } else {
+                                    return;
+                                };
+                                for EventListener { msg, .. } in listeners {
                                     self.events.events.push(events::Event {
                                         event_type: EventTypes::Select,
                                         window_event: WindowEvent::SelectNext,
@@ -222,231 +348,115 @@ where
                                         key: *key,
                                     });
                                 }
-                                None => {
+                            }
+                            None => (),
+                        },
+                    }
+                    return;
+                }
+                WindowEvent::Input { text } => {
+                    let key = if let Some(key) = self.select.selected {
+                        key
+                    } else {
+                        return;
+                    };
+                    if let Some(e) = self.get_element(key) {
+                        match e.events.get(&EventTypes::Input) {
+                            Some(e) => {
+                                for EventListener { msg, .. } in e {
                                     self.events.events.push(events::Event {
-                                        event_type: EventTypes::Select,
-                                        window_event: WindowEvent::SelectNext,
-                                        element_event: ElementEvent::Unselect,
+                                        event_type: EventTypes::Input,
+                                        window_event: event.clone(),
+                                        element_event: ElementEvent::Input { text: text.clone() },
                                         msg,
-                                        key: *selected,
+                                        key,
                                     });
-                                    self.select.selected = None;
                                 }
-                            },
+                            }
+                            None => {}
                         }
                     }
-                    None => match self.select.selectables.first() {
-                        Some(key) => {
-                            self.select.selected = Some(*key);
-                            let msg = if let Some(element) = self.get_element(*key) {
-                                match element.event_listeners.get(&EventTypes::Select) {
-                                    Some(m) => m.clone(),
-                                    None => return,
-                                }
-                            } else {
-                                return;
-                            };
-                            self.events.events.push(events::Event {
-                                event_type: EventTypes::Select,
-                                window_event: WindowEvent::SelectNext,
-                                element_event: ElementEvent::Select,
-                                msg,
-                                key: *key,
-                            });
-                        }
-                        None => (),
-                    },
-                },
+                    return;
+                }
                 _ => {}
             }
-            self.element_event(entry_key, &event);
-        }
-    }
+            //self.element_event(entry_key, &event);
+            let mut consumed = false;
+            for i in (0..self.ordered.len()).rev() {
+                let element = if let Some(e) = self.get_element(self.ordered[i]) {
+                    e
+                } else {
+                    continue;
+                };
 
-    fn element_event(&mut self, key: ElementKey, event: &events::WindowEvent) -> EventResponse {
-        // propagate event to children
-        let element = match self.elements.get_mut(&key) {
-            Some(element) => element,
-            None => return EventResponse::Ignored,
-        };
-        if !element.styles.visible {
-            return EventResponse::Ignored;
-        }
-        let mut response = EventResponse::Ignored;
-        match element.children.to_owned() {
-            Children::Element(child) => {
-                response = self.element_event(child, event);
-            }
-            Children::Layers(children) => {
-                for child in children {
-                    response = self.element_event(child, event);
-                    if response == EventResponse::Consumed {
-                        break;
-                    }
-                }
-            }
-            Children::Rows { children, .. } => {
-                for child in children {
-                    response = self.element_event(child.element, event);
-                    if response == EventResponse::Consumed {
-                        break;
-                    }
-                }
-            }
-            Children::Columns { children, .. } => {
-                for child in children {
-                    response = self.element_event(child.element, event);
-                    if response == EventResponse::Consumed {
-                        break;
-                    }
-                }
-            }
-            Children::None => {}
-        }
-        if response == EventResponse::Consumed {
-            return response;
-        }
-        let element = match self.elements.get_mut(&key) {
-            Some(element) => element,
-            None => return EventResponse::Ignored,
-        };
-        match event {
-            events::WindowEvent::MouseDown { button } => {
-                let position = self.input.mouse;
-                if element.transform.point_collision(position) {
-                    if let Some(msg) = element.event_listeners.get(&EventTypes::MouseDown) {
-                        self.events.events.push(events::Event {
-                            event_type: EventTypes::MouseDown,
-                            window_event: event.clone(),
-                            element_event: ElementEvent::from_window_event(
-                                event,
-                                &element,
-                                &self.input,
-                            ),
-                            msg: msg.clone(),
-                            key,
-                        });
-                    }
-                }
-            }
-            events::WindowEvent::MouseUp { button } => {
-                let position = self.input.mouse;
-                if element.transform.point_collision(position) {
-                    if let Some(msg) = element.event_listeners.get(&EventTypes::MouseUp) {
-                        self.events.events.push(events::Event {
-                            event_type: EventTypes::MouseUp,
-                            window_event: event.clone(),
-                            element_event: ElementEvent::from_window_event(
-                                event,
-                                &element,
-                                &self.input,
-                            ),
-                            msg: msg.clone(),
-                            key,
-                        });
-                    }
-                }
-            }
-            events::WindowEvent::Scroll { delta } => {
-                let position = self.input.mouse;
-                if element.transform.point_collision(position) {
-                    if let Some(msg) = element.event_listeners.get(&EventTypes::Scroll) {
-                        todo!();
-                    }
-                }
-            }
-            WindowEvent::Input { text } => {
-                if let Some(msg) = element.event_listeners.get(&EventTypes::Input) {
-                    todo!();
-                }
-            }
-            events::WindowEvent::MouseMove { .. } => {
-                let position = self.input.mouse;
-                let prev = self.input.prev_mouse;
-                let (this, prev) = (
-                    element.transform.point_collision(position),
-                    element.transform.point_collision(prev),
-                );
-                match (this, prev) {
-                    (true, false) => {
-                        if let Some(msg) = element.event_listeners.get(&EventTypes::MouseEnter) {
-                            self.events.events.push(events::Event {
-                                event_type: EventTypes::MouseEnter,
-                                window_event: event.clone(),
-                                element_event: ElementEvent::from_window_event(
-                                    event,
-                                    &element,
-                                    &self.input,
-                                ),
-                                msg: msg.clone(),
-                                key,
-                            });
+                match &event {
+                    // Events that need to take into account cursor position
+                    WindowEvent::MouseDown { .. }
+                    | WindowEvent::MouseUp { .. }
+                    | WindowEvent::Scroll { .. }
+                    | WindowEvent::MouseMove { .. } => {
+                        let event_type = event.clone().into();
+                        match element.events.get(&event_type) {
+                            Some(listeners) => {
+                                let position = self.input.mouse;
+                                if element.transform.point_collision(position) {
+                                    let element_event = ElementEvent::from_window_event(
+                                        &event,
+                                        element,
+                                        &self.input,
+                                    );
+                                    for EventListener {
+                                        listener_type, msg, ..
+                                    } in &listeners
+                                    {
+                                        match listener_type {
+                                            EventListenerTypes::Listen => {
+                                                if consumed {
+                                                    continue;
+                                                }
+                                                self.events.events.push(events::Event {
+                                                    event_type,
+                                                    window_event: event.clone(),
+                                                    element_event: element_event.clone(),
+                                                    msg: msg.clone(),
+                                                    key: self.ordered[i],
+                                                });
+                                                consumed = true;
+                                            }
+                                            EventListenerTypes::Peek => {
+                                                if consumed {
+                                                    continue;
+                                                }
+                                                self.events.events.push(events::Event {
+                                                    event_type,
+                                                    window_event: event.clone(),
+                                                    element_event: element_event.clone(),
+                                                    msg: msg.clone(),
+                                                    key: self.ordered[i],
+                                                });
+                                            }
+                                            EventListenerTypes::Force => {
+                                                self.events.events.push(events::Event {
+                                                    event_type,
+                                                    window_event: event.clone(),
+                                                    element_event: element_event.clone(),
+                                                    msg: msg.clone(),
+                                                    key: self.ordered[i],
+                                                });
+                                                consumed = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            None => continue,
                         }
                     }
-                    (false, true) => {
-                        if let Some(msg) = element.event_listeners.get(&EventTypes::MouseLeave) {
-                            self.events.events.push(events::Event {
-                                event_type: EventTypes::MouseLeave,
-                                window_event: event.clone(),
-                                element_event: ElementEvent::from_window_event(
-                                    event,
-                                    &element,
-                                    &self.input,
-                                ),
-                                msg: msg.clone(),
-                                key,
-                            });
-                        }
-                    }
-                    _ => {}
-                }
-                if this {
-                    if let Some(msg) = element.event_listeners.get(&EventTypes::MouseMove) {
-                        self.events.events.push(events::Event {
-                            event_type: EventTypes::MouseMove,
-                            window_event: event.clone(),
-                            element_event: ElementEvent::from_window_event(
-                                event,
-                                &element,
-                                &self.input,
-                            ),
-                            msg: msg.clone(),
-                            key,
-                        });
-                    }
+                    WindowEvent::Input { .. } => (),
+                    WindowEvent::SelectNext => (),
+                    WindowEvent::SelectPrev => (),
                 }
             }
-            _ => {}
-        };
-        EventResponse::Ignored
-    }
-
-    fn traverse_elements(&self, key: ElementKey, f: &mut dyn FnMut(&Element<Msg>)) {
-        let element = match self.elements.get(&key) {
-            Some(element) => element,
-            None => return,
-        };
-        f(element);
-        match element.children.to_owned() {
-            Children::Element(child) => {
-                self.traverse_elements(child, f);
-            }
-            Children::Layers(children) => {
-                for child in children {
-                    self.traverse_elements(child, f);
-                }
-            }
-            Children::Rows { children, .. } => {
-                for child in children {
-                    self.traverse_elements(child.element, f);
-                }
-            }
-            Children::Columns { children, .. } => {
-                for child in children {
-                    self.traverse_elements(child.element, f);
-                }
-            }
-            Children::None => return,
         }
     }
 
@@ -508,14 +518,6 @@ where
         } else {
             return;
         };
-        self.element_transform(
-            entry_key,
-            &ElementTransform {
-                position: Point::new(self.size.0 as f32 / 2.0, self.size.1 as f32 / 2.0),
-                scale: Point::new(self.size.0 as f32, self.size.1 as f32),
-                rotation: 0.0,
-            },
-        );
         self.ordered.clear();
         self.select.selectables.clear();
         self.order(entry_key);
@@ -527,6 +529,14 @@ where
                 .cmp(&self.get_element(*b).map(|e| e.styles.z_index).unwrap_or(0))
         });
         self.ordered = ordered;
+        self.element_transform(
+            entry_key,
+            &ElementTransform {
+                position: Point::new(self.size.0 as f32 / 2.0, self.size.1 as f32 / 2.0),
+                scale: Point::new(self.size.0 as f32, self.size.1 as f32),
+                rotation: 0.0,
+            },
+        );
     }
 
     fn order(&mut self, key: ElementKey) {
@@ -649,41 +659,45 @@ where
             let post_collision = element.transform.point_collision(self.input.mouse);
             match (pre_collision, post_collision) {
                 (true, false) => {
-                    if let Some(msg) = element.event_listeners.get(&EventTypes::MouseLeave) {
-                        let event = WindowEvent::MouseMove {
-                            position: self.input.mouse,
-                            last: self.input.prev_mouse,
-                        };
-                        self.events.events.push(events::Event {
-                            event_type: EventTypes::MouseLeave,
-                            element_event: ElementEvent::from_window_event(
-                                &event,
-                                &element,
-                                &self.input,
-                            ),
-                            window_event: event,
-                            msg: msg.clone(),
-                            key,
-                        });
+                    if let Some(listeners) = element.events.get(&EventTypes::MouseLeave) {
+                        for EventListener { msg, .. } in listeners {
+                            let event = WindowEvent::MouseMove {
+                                position: self.input.mouse,
+                                last: self.input.prev_mouse,
+                            };
+                            self.events.events.push(events::Event {
+                                event_type: EventTypes::MouseLeave,
+                                element_event: ElementEvent::from_window_event(
+                                    &event,
+                                    &element,
+                                    &self.input,
+                                ),
+                                window_event: event,
+                                msg: msg.clone(),
+                                key,
+                            });
+                        }
                     }
                 }
                 (false, true) => {
-                    if let Some(msg) = element.event_listeners.get(&EventTypes::MouseEnter) {
-                        let event = WindowEvent::MouseMove {
-                            position: self.input.mouse,
-                            last: self.input.prev_mouse,
-                        };
-                        self.events.events.push(events::Event {
-                            event_type: EventTypes::MouseEnter,
-                            element_event: ElementEvent::from_window_event(
-                                &event,
-                                &element,
-                                &self.input,
-                            ),
-                            window_event: event,
-                            msg: msg.clone(),
-                            key,
-                        });
+                    if let Some(listeners) = element.events.get(&EventTypes::MouseEnter) {
+                        for EventListener { msg, .. } in listeners {
+                            let event = WindowEvent::MouseMove {
+                                position: self.input.mouse,
+                                last: self.input.prev_mouse,
+                            };
+                            self.events.events.push(events::Event {
+                                event_type: EventTypes::MouseEnter,
+                                element_event: ElementEvent::from_window_event(
+                                    &event,
+                                    &element,
+                                    &self.input,
+                                ),
+                                window_event: event,
+                                msg: msg.clone(),
+                                key,
+                            });
+                        }
                     }
                 }
                 _ => {}
@@ -835,10 +849,6 @@ where
     }
 
     pub fn render<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) {
-        let entry_key = match &self.entry {
-            Some(entry) => entry,
-            None => return,
-        };
         pass.set_bind_group(0, &self.gpu.dimensions_bind_group, &[]);
 
         //self.render_element(*entry_key, pass);
@@ -850,68 +860,6 @@ where
             }
         }
     }
-
-    fn render_element<'a>(&'a self, key: ElementKey, pass: &mut wgpu::RenderPass<'a>) {
-        let element = match self.elements.get(&key) {
-            Some(element) => element,
-            None => return,
-        };
-        if !element.styles.visible {
-            return;
-        }
-        if let Some(render) = &element.render_element {
-            render.render(&self.gpu.pipelines, pass)
-        }
-        match element.children.to_owned() {
-            Children::Element(child) => {
-                self.render_element(child, pass);
-            }
-            Children::Layers(children) => {
-                for child in children {
-                    self.render_element(child, pass);
-                }
-            }
-            Children::Rows { children, .. } => {
-                for child in children {
-                    self.render_element(child.element, pass);
-                }
-            }
-            Children::Columns { children, .. } => {
-                for child in children {
-                    self.render_element(child.element, pass);
-                }
-            }
-            Children::None => return,
-        }
-    }
-
-    /*pub fn texture_from_bytes(&self, bytes: &[u8], label: &str, device: &wgpu::Device, queue: &wgpu::Queue) -> Arc<texture::Texture> {
-        Arc::new(texture::Texture::from_bytes(device, queue, bytes, label))
-    }
-
-    pub fn texture_from_image(
-        &self,
-        img: &image::DynamicImage,
-        label: Option<&str>,
-        device: &wgpu::Device, queue: &wgpu::Queue
-    ) -> Arc<texture::Texture> {
-        Arc::new(texture::Texture::from_image(device, queue, img, label))
-    }
-
-    */
-    fn texture_from_image_buffer(
-        &self,
-        img: ImageBuffer<Rgba<u8>, Vec<u8>>,
-        label: Option<&str>,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-    ) -> Arc<texture::Texture> {
-        let mut image = DynamicImage::new(img.width(), img.height(), image::ColorType::Rgba8);
-        for (x, y, pixel) in img.enumerate_pixels() {
-            image.put_pixel(x, y, *pixel);
-        }
-        Arc::new(texture::Texture::from_image(device, queue, &image, label))
-    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -920,7 +868,7 @@ where
 /// Element transformations are applied to the element and its children
 /// when the element is rendered for the first time or when the element
 /// or its parent is resized
-pub struct ElementTransform {
+pub(crate) struct ElementTransform {
     /// Position in x and y of the top left corner
     pub position: Point,
     /// Scale in width and height
@@ -930,14 +878,6 @@ pub struct ElementTransform {
 }
 
 impl ElementTransform {
-    pub fn new(position: Point, scale: Point, rotation: f32) -> Self {
-        Self {
-            position,
-            scale,
-            rotation,
-        }
-    }
-
     pub fn zeroed() -> Self {
         Self {
             position: Point::new(0.0, 0.0),
@@ -962,6 +902,8 @@ impl ElementTransform {
     }
 }
 
+
+/// Most basic building block of the Rugui library
 #[derive(Default)]
 pub struct Element<Msg>
 where
@@ -971,52 +913,141 @@ where
     pub label: Option<String>,
     pub render_element: Option<RenderElement>,
     pub styles: StyleSheet,
-    pub event_listeners: HashMap<EventTypes, Msg>,
+    pub events: EventListeners<Msg>,
     pub children: Children,
     text_buffer: Option<cosmic_text::Buffer>,
     transform: ElementTransform,
-    parent: ElementTransform,
+    _parent: ElementTransform,
+}
+
+/// Holds all event listeners for an `Element`
+#[derive(Debug, Clone, Default)]
+pub struct EventListeners<Msg: Clone> {
+    pub(crate) events: Vec<EventListener<Msg>>,
+}
+
+/// Listens to events
+#[derive(Debug, Clone)]
+pub struct EventListener<Msg: Clone> {
+    event_type: EventTypes,
+    listener_type: EventListenerTypes,
+    msg: Msg,
+}
+
+impl<Msg: Clone> EventListeners<Msg> {
+    /// Normal type of event listener
+    ///
+    /// This listener will only catch unconsumed events and will then consume it
+    pub fn listen(&mut self, event_type: EventTypes, msg: Msg) {
+        self.events.push(EventListener {
+            event_type,
+            listener_type: EventListenerTypes::Listen,
+            msg,
+        })
+    }
+    /// Special type of event listener
+    ///
+    /// This listener will catch both consumed and unconsumed events and will consume them
+    ///
+    /// Use this for fancy backgrounds
+    pub fn force(&mut self, event_type: EventTypes, msg: Msg) {
+        self.events.push(EventListener {
+            event_type,
+            listener_type: EventListenerTypes::Force,
+            msg,
+        })
+    }
+    /// Special type of event listener
+    ///
+    /// This listener will only catch unconsumed events and will not consume it
+    ///
+    /// Use this for fancy overlays
+    pub fn peek(&mut self, event_type: EventTypes, msg: Msg) {
+        self.events.push(EventListener {
+            event_type,
+            listener_type: EventListenerTypes::Peek,
+            msg,
+        })
+    }
+
+    pub fn get(&self, event_type: &EventTypes) -> Option<Vec<EventListener<Msg>>> {
+        let collection = self
+            .events
+            .iter()
+            .filter(|e| &e.event_type == event_type)
+            .map(|e| e.clone())
+            .collect::<Vec<EventListener<Msg>>>();
+        match collection.len() {
+            0 => None,
+            _ => Some(collection),
+        }
+    }
+
+    fn new() -> Self {
+        Self { events: Vec::new() }
+    }
+}
+
+/// Describes privilege level for listener
+#[derive(Debug, Clone, Default)]
+pub enum EventListenerTypes {
+    /// Normal type of event listener
+    ///
+    /// This listener will only catch unconsumed events and will then consume it
+    #[default]
+    Listen,
+    /// Special type of event listener
+    ///
+    /// This listener will only catch unconsumed events and will not consume it
+    ///
+    /// Use this for fancy overlays
+    Peek,
+    /// Special type of event listener
+    ///
+    /// This listener will catch both consumed and unconsumed events and will consume them
+    ///
+    /// Use this for fancy backgrounds
+    Force,
 }
 
 impl<Msg> Element<Msg>
 where
     Msg: Clone,
 {
+    /// Creates a new `Element`
     pub fn new() -> Self {
         Self {
             text: None,
             label: None,
             render_element: None,
             styles: StyleSheet::default(),
-            event_listeners: HashMap::new(),
+            events: EventListeners::new(),
             children: Children::None,
             text_buffer: None,
             transform: ElementTransform::zeroed(),
-            parent: ElementTransform::zeroed(),
+            _parent: ElementTransform::zeroed(),
         }
     }
 
+    /// Configures label for `Element`
     pub fn with_label(mut self, label: &str) -> Self {
         self.label = Some(label.to_string());
         self
     }
 
+    /// Configures styles for `Element`
     pub fn with_styles(mut self, styles: StyleSheet) -> Self {
         self.styles = styles;
         self
     }
 
-    pub fn with_event_listener(mut self, event: EventTypes, msg: Msg) -> Self {
-        self.event_listeners.insert(event, msg);
-        self
-    }
-
+    /// Configures children for `Element`
     pub fn with_children(mut self, children: Children) -> Self {
         self.children = children;
         self
     }
 
-    pub fn write(
+    pub(crate) fn write(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -1038,6 +1069,11 @@ where
             let color = self.styles.background.color;
             render_element.set_color(color, queue, device);
             self.styles.flags.dirty_color = false;
+        }
+        if self.styles.flags.dirty_alpha {
+            let alpha = self.styles.alpha;
+            render_element.data.alpha = alpha;
+            self.styles.flags.dirty_alpha = false;
         }
         if self.styles.flags.dirty_transform {
             let transform = &self.transform;
@@ -1105,7 +1141,7 @@ where
                                 self.transform.scale.y as u32,
                                 image::ColorType::Rgba8,
                             );
-                            tb.draw(swash_cache, color, |x, y, w, h, color| {
+                            tb.draw(swash_cache, color, |x, y, _, _, color| {
                                 if x < 0
                                     || y < 0
                                     || x >= self.transform.scale.x as i32
@@ -1140,7 +1176,7 @@ where
                                 self.transform.scale.y as u32,
                                 image::ColorType::Rgba8,
                             );
-                            tb.draw(swash_cache, color, |x, y, w, h, color| {
+                            tb.draw(swash_cache, color, |x, y, _, _, color| {
                                 if x < 0
                                     || y < 0
                                     || x >= self.transform.scale.x as i32
@@ -1165,6 +1201,7 @@ where
         self.render_element = Some(render_element)
     }
 
+    /// Returns text rendered inside the `Element`
     pub fn text(&self) -> Option<&String> {
         match &self.text {
             Some((str, _)) => Some(str),
@@ -1172,6 +1209,7 @@ where
         }
     }
 
+    /// Configures text rendered inside the `Element`
     pub fn text_mut(&mut self) -> Option<&mut String> {
         match &mut self.text {
             Some((str, dirty)) => {
@@ -1182,6 +1220,7 @@ where
         }
     }
 
+    /// Configures text rendered inside the `Element`
     pub fn text_str(&mut self, str: &str) {
         match &mut self.text {
             Some((text, dirty)) => {
@@ -1194,6 +1233,7 @@ where
         }
     }
 
+    /// Configures text rendered inside the `Element`
     pub fn text_string(&mut self, str: String) {
         match &mut self.text {
             Some((text, dirty)) => {
@@ -1206,7 +1246,7 @@ where
         }
     }
 
-    pub fn place_point(&self, point: Point) -> Point {
+    pub(crate) fn place_point(&self, point: Point) -> Point {
         let x = point.x - self.transform.position.x;
         let y = point.y - self.transform.position.y;
         let point = Point::new(x, y);
@@ -1214,26 +1254,35 @@ where
     }
 }
 
+/// Describes how many `Children` an `Element` has and how they should be positioned
 #[derive(Clone, Debug, Default)]
 pub enum Children {
+    /// Positions child `Element` on top of parent
     Element(ElementKey),
+    /// Positions child `Elements` in layers on top of the parent
     Layers(Vec<ElementKey>),
+    /// Positions child `Elements` in rows on top of the parent
     Rows {
         children: Vec<Section>,
         spacing: Size,
     },
+    /// Positions child `Elements` in columns on top of the parent
     Columns {
         children: Vec<Section>,
         spacing: Size,
     },
 
+    /// Element has no children
     #[default]
     None,
 }
 
+/// Describes allocated space for a child `Element` inside rows/columns
 #[derive(Clone, Debug)]
 pub struct Section {
+    /// Child `Element`
     pub element: ElementKey,
+    /// Allocated space
     pub size: Size,
 }
 
@@ -1249,6 +1298,7 @@ fn rotate_point(point: Point, pivot: Point, angle: f32) -> Point {
     Point::new(rotated_x + pivot.x, rotated_y + pivot.y)
 }
 
+/// A point on the Gui context
 #[derive(Debug, Copy, Clone, Default)]
 pub struct Point {
     pub x: f32,
@@ -1256,6 +1306,7 @@ pub struct Point {
 }
 
 impl Point {
+    /// Creates new `Point`
     pub fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }

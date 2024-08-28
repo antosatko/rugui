@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use examples_common::Drawing;
-use rugui::{events::ElementEvent, render::Color, styles::{Position, RadialGradient, Size}, Element, Gui};
+use rugui::{events::ElementEvent, styles::{Position, RadialGradient, Size, Color}, Element, Gui};
 use winit::application::ApplicationHandler;
 
 extern crate examples_common;
@@ -54,8 +54,8 @@ impl ApplicationHandler for App {
 
         let mut element = Element::new().with_label("hello element");
         element
-            .event_listeners
-            .insert(rugui::events::EventTypes::MouseMove, Messages::BoxHover);
+            .events
+            .listen(rugui::events::EventTypes::MouseMove, Messages::BoxHover);
         let styles = &mut element.styles;
         styles.set_bg_rad_gradient(Some(RadialGradient {
             center: rugui::styles::ColorPoint { position: rugui::styles::Position::Center, color: Color::BLACK },
@@ -74,7 +74,7 @@ impl ApplicationHandler for App {
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
-        window_id: winit::window::WindowId,
+        _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
         let this = match self {
@@ -82,9 +82,7 @@ impl ApplicationHandler for App {
             App::Loading => return,
         };
 
-        if let Some(event) = rugui::winit::event(&event) {
-            this.gui.event(event);
-        }
+        rugui::winit::event(&mut this.gui, &event);
 
         while let Some(message) = this.gui.poll_event() {
             match message.msg {

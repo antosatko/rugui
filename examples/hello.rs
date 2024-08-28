@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use examples_common::Drawing;
-use rugui::{render::Color, styles::Size, Element, Gui};
+use rugui::{styles::{Size, Color}, Element, Gui};
 use winit::application::ApplicationHandler;
 
 extern crate examples_common;
@@ -26,7 +26,6 @@ pub enum App {
 pub struct Application {
     gui: Gui<()>,
     drawing: Drawing,
-    window: Arc<winit::window::Window>,
 }
 
 impl ApplicationHandler for App {
@@ -58,14 +57,13 @@ impl ApplicationHandler for App {
         *self = App::App(Application {
             gui,
             drawing,
-            window,
         });
     }
 
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
-        window_id: winit::window::WindowId,
+        _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
         let this = match self {

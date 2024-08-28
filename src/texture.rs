@@ -1,3 +1,6 @@
+//! Minimalistic module for textures
+
+
 use image::GenericImageView;
 
 #[derive(Debug)]

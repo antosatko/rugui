@@ -2,9 +2,7 @@ use std::sync::Arc;
 
 use examples_common::Drawing;
 use rugui::{
-    render::{Color, RenderRadialGradient},
-    styles::{ColorPoint, LinearGradient, Position, RadialGradient, Rotation, Size},
-    texture::Texture,
+    styles::{ColorPoint, LinearGradient, Position, RadialGradient, Rotation, Size, Color},
     Children, Element, ElementKey, Gui, Section,
 };
 use winit::{application::ApplicationHandler, window};
@@ -32,7 +30,6 @@ struct Application {
     drawing: Drawing,
     window: Arc<winit::window::Window>,
     t: f32,
-    start: std::time::Instant,
     rotation: bool,
 }
 
@@ -83,11 +80,11 @@ impl ApplicationHandler for App {
 
         let mut columns = Element::new().with_label("Columns");
         columns
-            .event_listeners
-            .insert(rugui::events::EventTypes::MouseEnter, Message::Card);
+            .events
+            .listen(rugui::events::EventTypes::MouseEnter, Message::Card);
         columns
-            .event_listeners
-            .insert(rugui::events::EventTypes::MouseLeave, Message::Card);
+            .events
+            .listen(rugui::events::EventTypes::MouseLeave, Message::Card);
         let mut column1 = Element::new().with_label("Column 1");
         let mut column2 = Element::new().with_label("Column 2");
         let mut column3 = Element::new().with_label("Column 3");
@@ -106,6 +103,7 @@ impl ApplicationHandler for App {
         }));
         column1_styles.set_bg_texture(Some(texture.clone()));
         column1_styles.transfomr_mut().margin = Size::Percent(-5.0);
+        column1_styles.set_alpha(0.5);
 
         let column2_styles = &mut column2.styles;
         column2_styles.transfomr_mut().rotation = Rotation::None;
@@ -202,7 +200,6 @@ impl ApplicationHandler for App {
             drawing,
             window,
             t: 0.0,
-            start: std::time::Instant::now(),
             rotation: false,
         };
         *self = App::App(this);
@@ -211,7 +208,7 @@ impl ApplicationHandler for App {
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
-        window_id: winit::window::WindowId,
+        _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
         let this = match self {
@@ -219,13 +216,7 @@ impl ApplicationHandler for App {
             App::Loading => return,
         };
 
-        match rugui::winit::event(&event) {
-            Some(event) => {
-                this.gui.event(event);
-            }
-            None => (),
-        }
-
+        rugui::winit::event(&mut this.gui, &event);
         while let Some(event) = this.gui.poll_event() {
             match event.msg {
                 Message::Card => match event.event_type {

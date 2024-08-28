@@ -1,30 +1,40 @@
-use crate::Point;
+//! Winit integration helpers *(use `winit` flag)*
+
+
 use crate::events::WindowEvent as RuguiWindowEvent;
-use winit::{event::{ElementState, WindowEvent as WinitWindowEvent}, keyboard::Key};
-pub fn event(event: &WinitWindowEvent) -> Option<RuguiWindowEvent> {
+use crate::Point;
+use winit::{
+    event::{ElementState, WindowEvent as WinitWindowEvent},
+    keyboard::{Key, NamedKey},
+};
+pub fn event<Msg: Clone>(gui: &mut crate::Gui<Msg>, event: &WinitWindowEvent) {
     match event {
         WinitWindowEvent::MouseInput {
-            device_id,
+            device_id: _,
             state,
             button,
-        } => {
-            let button = convert_mouse_button(*button)?;
-            match state {
-                winit::event::ElementState::Pressed => Some(RuguiWindowEvent::MouseDown { button }),
-                winit::event::ElementState::Released => Some(RuguiWindowEvent::MouseUp { button }),
-            }
-        }
+        } => match convert_mouse_button(*button) {
+            Some(button) => match state {
+                winit::event::ElementState::Pressed => {
+                    gui.event(RuguiWindowEvent::MouseDown { button })
+                }
+                winit::event::ElementState::Released => {
+                    gui.event(RuguiWindowEvent::MouseUp { button })
+                }
+            },
+            _ => (),
+        },
         WinitWindowEvent::CursorMoved {
-            device_id,
+            device_id: _,
             position,
-        } => Some(RuguiWindowEvent::MouseMove {
+        } => gui.event(RuguiWindowEvent::MouseMove {
             position: Point::new(position.x as f32, position.y as f32),
             last: Point::new(position.x as f32, position.y as f32),
         }),
         WinitWindowEvent::MouseWheel {
-            device_id,
+            device_id: _,
             delta,
-            phase,
+            phase: _,
         } => {
             let delta = match delta {
                 winit::event::MouseScrollDelta::LineDelta(x, y) => Point::new(*x, *y),
@@ -32,24 +42,50 @@ pub fn event(event: &WinitWindowEvent) -> Option<RuguiWindowEvent> {
                     Point::new(delta.x as f32, delta.y as f32)
                 }
             };
-            Some(RuguiWindowEvent::Scroll { delta })
+            gui.event(RuguiWindowEvent::Scroll { delta })
         }
         WinitWindowEvent::KeyboardInput {
-            device_id,
+            device_id: _,
             event,
-            is_synthetic,
-        } => match &event.logical_key {
-            Key::Character(c) => Some(RuguiWindowEvent::Input {
-                text: c.to_string(),
-            }),
-            Key::Named(winit::keyboard::NamedKey::Tab) => if event.state == ElementState::Pressed {
-                Some(RuguiWindowEvent::SelectNext)
-            } else {
-                None
+            is_synthetic: _,
+        } => {
+            match event.state {
+                ElementState::Pressed => match &event.logical_key {
+                    Key::Named(winit::keyboard::NamedKey::Tab) => {
+                        gui.event(RuguiWindowEvent::SelectNext)
+                    }
+                    Key::Named(NamedKey::Control) => {
+                        gui.input.control_pressed = true;
+                    }
+                    Key::Character(c) if gui.input.control_pressed =>
+                    {
+                        #[cfg(feature = "clipboard")]
+                        if c.as_str() == "v" {
+                            use clipboard::ClipboardProvider;
+                            if let Some(clip) = &mut gui.clipboard_ctx {
+                                match clip.get_contents() {
+                                    Ok(text) => gui.event(RuguiWindowEvent::Input { text }),
+                                    _ => (),
+                                }
+                            }
+                        }
+                    }
+                    _ => (),
+                },
+                ElementState::Released => match &event.logical_key {
+                    Key::Named(NamedKey::Control) => {
+                        gui.input.control_pressed = false;
+                    }
+                    _ => (),
+                },
             }
-            _ => None
-        },
-        _ => None,
+            if let Some(input) = key_input(event) {
+                if !gui.input.control_pressed {
+                    gui.event(RuguiWindowEvent::Input { text: input })
+                }
+            }
+        }
+        _ => (),
     }
 }
 
@@ -59,5 +95,20 @@ fn convert_mouse_button(button: winit::event::MouseButton) -> Option<crate::even
         winit::event::MouseButton::Right => Some(crate::events::MouseButton::Right),
         winit::event::MouseButton::Middle => Some(crate::events::MouseButton::Middle),
         _ => None,
+    }
+}
+
+fn key_input(event: &winit::event::KeyEvent) -> Option<String> {
+    if event.state != ElementState::Pressed {
+        return None;
+    }
+    match &event.logical_key {
+        Key::Named(winit::keyboard::NamedKey::Tab) => return None,
+        Key::Named(winit::keyboard::NamedKey::Backspace) => return None,
+        _ => (),
+    }
+    match &event.text {
+        Some(txt) => return Some(txt.to_string()),
+        None => None,
     }
 }

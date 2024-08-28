@@ -1,9 +1,12 @@
+//! `Element` styles
+
+
 use std::sync::Arc;
 
 use crate::Point;
 use bytemuck::Zeroable;
 
-use crate::{render::Color, texture::Texture};
+use crate::texture::Texture;
 #[derive(Debug, Clone)]
 pub struct StyleSheet {
     /// Transform of the element
@@ -30,6 +33,8 @@ pub struct StyleSheet {
     ///
     /// If false, the element and its children will not be rendered
     pub(crate) visible: bool,
+
+    pub(crate) alpha: f32,
 
     /// Hint for the gui engine that this element can be selected for keyboard input
     ///
@@ -124,6 +129,7 @@ pub struct Flags {
     pub(crate) dirty_text: bool,
     pub(crate) dirty_transform: bool,
     pub(crate) dirty_border: bool,
+    pub(crate) dirty_alpha: bool,
 
     pub(crate) recalc_transform: bool,
 }
@@ -138,6 +144,7 @@ impl Default for Flags {
             dirty_text: true,
             dirty_transform: true,
             dirty_border: true,
+            dirty_alpha: true,
 
             recalc_transform: true,
         }
@@ -190,6 +197,7 @@ impl Default for StyleSheet {
                 max_radius: Size::None,
                 visible: false,
             },
+            alpha: 1.0,
             text: Text::default(),
             visible: true,
             selectable: false,
@@ -421,6 +429,15 @@ impl StyleSheet {
         self.text.line_height = size + lines;
         self.flags.dirty_text = true;
     }
+
+    pub fn set_alpha(&mut self, alpha: f32) {
+        self.alpha = alpha;
+        self.flags.dirty_alpha = true;
+    }
+
+    pub fn get_alpha(&mut self) -> f32 {
+        self.alpha
+    }
 }
 
 /// Position of the element relative to its parent
@@ -562,4 +579,136 @@ pub struct LinearGradient {
 pub struct RadialGradient {
     pub center: ColorPoint,
     pub radius: ColorPoint,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+#[repr(C)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Color {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    pub a: f32,
+}
+
+impl Color {
+    pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
+        Self { r, g, b, a }
+    }
+
+    pub const TRANSPARENT: Self = Self {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 0.0,
+    };
+
+    pub const WHITE: Self = Self {
+        r: 1.0,
+        g: 1.0,
+        b: 1.0,
+        a: 1.0,
+    };
+
+    pub const BLACK: Self = Self {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+    };
+
+    pub const RED: Self = Self {
+        r: 1.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+    };
+
+    pub const GREEN: Self = Self {
+        r: 0.0,
+        g: 1.0,
+        b: 0.0,
+        a: 1.0,
+    };
+
+    pub const BLUE: Self = Self {
+        r: 0.0,
+        g: 0.0,
+        b: 1.0,
+        a: 1.0,
+    };
+
+    pub const YELLOW: Self = Self {
+        r: 1.0,
+        g: 1.0,
+        b: 0.0,
+        a: 1.0,
+    };
+
+    pub const CYAN: Self = Self {
+        r: 0.0,
+        g: 1.0,
+        b: 1.0,
+        a: 1.0,
+    };
+
+    pub const MAGENTA: Self = Self {
+        r: 1.0,
+        g: 0.0,
+        b: 1.0,
+        a: 1.0,
+    };
+
+    pub fn with_alpha(&self, a: f32) -> Self {
+        Self {
+            r: self.r,
+            g: self.g,
+            b: self.b,
+            a,
+        }
+    }
+
+    pub fn with_red(&self, r: f32) -> Self {
+        Self {
+            r,
+            g: self.g,
+            b: self.b,
+            a: self.a,
+        }
+    }
+
+    pub fn with_green(&self, g: f32) -> Self {
+        Self {
+            r: self.r,
+            g,
+            b: self.b,
+            a: self.a,
+        }
+    }
+
+    pub fn with_blue(&self, b: f32) -> Self {
+        Self {
+            r: self.r,
+            g: self.g,
+            b,
+            a: self.a,
+        }
+    }
+}
+
+impl From<[f32; 4]> for Color {
+    fn from(array: [f32; 4]) -> Self {
+        Self {
+            r: array[0],
+            g: array[1],
+            b: array[2],
+            a: array[3],
+        }
+    }
+}
+
+impl From<Color> for [f32; 4] {
+    fn from(color: Color) -> [f32; 4] {
+        [color.r, color.g, color.b, color.a]
+    }
 }

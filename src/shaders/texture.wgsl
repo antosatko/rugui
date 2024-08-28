@@ -12,6 +12,7 @@ struct VertexOutput {
 @group(1)@binding(0) var<uniform> center: vec2<f32>;
 @group(1)@binding(1) var<uniform> size: vec2<f32>;
 @group(1)@binding(2) var<uniform> rotation: f32;
+@group(1)@binding(3) var<uniform> alpha: f32;
 
 @group(2)@binding(0) var t_diffuse: texture_2d<f32>;
 @group(2)@binding(1) var t_sampler: sampler;
@@ -47,7 +48,8 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0)vec4<f32> {
-    return textureSample(t_diffuse, t_sampler, in.v_tex_coords);
+    var color =  textureSample(t_diffuse, t_sampler, in.v_tex_coords);
+    return vec4<f32>(color.rgb, color.a*alpha);
 }
 
 

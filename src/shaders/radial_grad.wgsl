@@ -13,6 +13,7 @@ struct VertexOutput {
 @group(1)@binding(0) var<uniform> center: vec2<f32>;
 @group(1)@binding(1) var<uniform> size: vec2<f32>;
 @group(1)@binding(2) var<uniform> rotation: f32;
+@group(1)@binding(3) var<uniform> alpha: f32;
 
 @group(2)@binding(0) var<uniform> center_color: vec4<f32>;
 @group(2)@binding(1) var<uniform> center_pos: vec2<f32>;
@@ -52,7 +53,8 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0)vec4<f32> {
     var dist = distance(in.v_grad_coords, center_pos);
-    return mix(center_color, outer_color, dist / radius);
+    var color = mix(center_color, outer_color, dist / radius);
+    return vec4<f32>(color.rgb, color.a*alpha);
 }
 
 

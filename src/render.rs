@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::styles::Color;
 use crate::Point;
 use wgpu::include_wgsl;
 
@@ -511,7 +512,7 @@ impl RenderRadialGradient {
         );
     }
 
-    pub fn from_style(&mut self, style: &RadialGradient, transform: &ElementTransform) {
+    pub(crate) fn from_style(&mut self, style: &RadialGradient, transform: &ElementTransform) {
         self.center = style.center.position.normalized(transform.scale);
         self.center_color = style.center.color;
         self.radius = {
@@ -726,7 +727,7 @@ impl RenderLinearGradient {
         queue.write_buffer(&self.end_buffer, 0, bytemuck::cast_slice(&[self.end]));
     }
 
-    pub fn from_style(&mut self, style: &LinearGradient, transform: &ElementTransform) {
+    pub(crate) fn from_style(&mut self, style: &LinearGradient, transform: &ElementTransform) {
         self.start = style.p1.position.normalized(transform.scale);
         self.start_color = style.p1.color;
         self.end = style.p2.position.normalized(transform.scale);
@@ -734,21 +735,13 @@ impl RenderLinearGradient {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-#[repr(C)]
-#[derive(bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Color {
-    pub r: f32,
-    pub g: f32,
-    pub b: f32,
-    pub a: f32,
-}
 
 pub struct RenderElement {
     pub data: RenderElementData,
     pub center_buffer: wgpu::Buffer,
     pub size_buffer: wgpu::Buffer,
     pub rotation_buffer: wgpu::Buffer,
+    pub alpha_buffer: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
     pub color: Option<RenderColor>,
     pub texture: Option<Arc<Texture>>,
@@ -820,15 +813,17 @@ pub struct RenderElementData {
     pub size: [f32; 2],
     pub rotation: f32,
     pub color: Color,
+    pub alpha: f32,
 }
 
 impl RenderElementData {
-    pub fn new(center: [f32; 2], size: [f32; 2], rotation: f32, color: Color) -> Self {
+    pub fn new(center: [f32; 2], size: [f32; 2], rotation: f32, color: Color, alpha: f32) -> Self {
         Self {
             center,
             size,
             rotation,
             color,
+            alpha,
         }
     }
 
@@ -842,23 +837,10 @@ impl RenderElementData {
             b: 0.0,
             a: 0.0,
         },
+        alpha: 0.0,
     };
 
-    pub fn from_transform(transform: &crate::ElementTransform) -> Self {
-        Self {
-            center: [transform.position.x, transform.position.y],
-            size: [transform.scale.x, transform.scale.y],
-            rotation: transform.rotation,
-            color: Color {
-                r: 0.0,
-                g: 0.0,
-                b: 0.0,
-                a: 0.0,
-            },
-        }
-    }
-
-    pub fn update_transform(&mut self, transform: &crate::ElementTransform) {
+    pub(crate) fn update_transform(&mut self, transform: &crate::ElementTransform) {
         self.center = [transform.position.x, transform.position.y];
         self.size = [transform.scale.x, transform.scale.y];
         self.rotation = transform.rotation;
@@ -915,6 +897,16 @@ impl RenderElement {
                 },
                 count: None,
             },
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::all(),
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
         ],
     };
 
@@ -934,6 +926,13 @@ impl RenderElement {
         });
 
         let rotation_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Rotation Buffer"),
+            size: std::mem::size_of::<[f32; 1]>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let aplha_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Rotation Buffer"),
             size: std::mem::size_of::<[f32; 1]>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
@@ -970,6 +969,14 @@ impl RenderElement {
                         size: None,
                     }),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                        buffer: &aplha_buffer,
+                        offset: 0,
+                        size: None,
+                    }),
+                },
             ],
         });
 
@@ -978,6 +985,7 @@ impl RenderElement {
             center_buffer,
             size_buffer,
             rotation_buffer,
+            alpha_buffer: aplha_buffer,
             bind_group,
             color: None,
             texture: None,
@@ -985,11 +993,6 @@ impl RenderElement {
             linear_gradient: None,
             text: None,
         }
-    }
-
-    pub fn set_transform(&mut self, transform: &crate::ElementTransform, queue: &wgpu::Queue) {
-        self.data.update_transform(transform);
-        self.write_all(queue);
     }
 
     pub fn set_color(&mut self, color: Color, queue: &wgpu::Queue, device: &wgpu::Device) {
@@ -1030,6 +1033,7 @@ impl RenderElement {
             0,
             bytemuck::cast_slice(&[self.data.rotation]),
         );
+        queue.write_buffer(&self.alpha_buffer, 0, bytemuck::cast_slice(&[self.data.alpha]));
     }
 
     pub fn bind(&self) -> &wgpu::BindGroup {
@@ -1097,126 +1101,4 @@ impl Color {
                 count: None,
             }],
         };
-}
-
-impl Color {
-    pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
-        Self { r, g, b, a }
-    }
-
-    pub const TRANSPARENT: Self = Self {
-        r: 0.0,
-        g: 0.0,
-        b: 0.0,
-        a: 0.0,
-    };
-
-    pub const WHITE: Self = Self {
-        r: 1.0,
-        g: 1.0,
-        b: 1.0,
-        a: 1.0,
-    };
-
-    pub const BLACK: Self = Self {
-        r: 0.0,
-        g: 0.0,
-        b: 0.0,
-        a: 1.0,
-    };
-
-    pub const RED: Self = Self {
-        r: 1.0,
-        g: 0.0,
-        b: 0.0,
-        a: 1.0,
-    };
-
-    pub const GREEN: Self = Self {
-        r: 0.0,
-        g: 1.0,
-        b: 0.0,
-        a: 1.0,
-    };
-
-    pub const BLUE: Self = Self {
-        r: 0.0,
-        g: 0.0,
-        b: 1.0,
-        a: 1.0,
-    };
-
-    pub const YELLOW: Self = Self {
-        r: 1.0,
-        g: 1.0,
-        b: 0.0,
-        a: 1.0,
-    };
-
-    pub const CYAN: Self = Self {
-        r: 0.0,
-        g: 1.0,
-        b: 1.0,
-        a: 1.0,
-    };
-
-    pub const MAGENTA: Self = Self {
-        r: 1.0,
-        g: 0.0,
-        b: 1.0,
-        a: 1.0,
-    };
-
-    pub fn with_alpha(&self, a: f32) -> Self {
-        Self {
-            r: self.r,
-            g: self.g,
-            b: self.b,
-            a,
-        }
-    }
-
-    pub fn with_red(&self, r: f32) -> Self {
-        Self {
-            r,
-            g: self.g,
-            b: self.b,
-            a: self.a,
-        }
-    }
-
-    pub fn with_green(&self, g: f32) -> Self {
-        Self {
-            r: self.r,
-            g,
-            b: self.b,
-            a: self.a,
-        }
-    }
-
-    pub fn with_blue(&self, b: f32) -> Self {
-        Self {
-            r: self.r,
-            g: self.g,
-            b,
-            a: self.a,
-        }
-    }
-}
-
-impl From<[f32; 4]> for Color {
-    fn from(array: [f32; 4]) -> Self {
-        Self {
-            r: array[0],
-            g: array[1],
-            b: array[2],
-            a: array[3],
-        }
-    }
-}
-
-impl From<Color> for [f32; 4] {
-    fn from(color: Color) -> [f32; 4] {
-        [color.r, color.g, color.b, color.a]
-    }
 }

@@ -13,6 +13,7 @@ struct VertexOutput {
 @group(1)@binding(0) var<uniform> center: vec2<f32>; 
 @group(1)@binding(1) var<uniform> size: vec2<f32>;
 @group(1)@binding(2) var<uniform> rotation: f32;
+@group(1)@binding(3) var<uniform> alpha: f32;
 
 @group(2)@binding(0) var<uniform> color: vec4<f32>;
 
@@ -47,7 +48,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0)vec4<f32> {
-    return color;
+    return vec4<f32>(color.rgb, color.a*alpha);
 }
 
 

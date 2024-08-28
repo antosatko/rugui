@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use examples_common::Drawing;
-use rugui::{render::Color, styles::Size, Children, Element, Gui, Section};
+use rugui::{styles::{Size, Color}, Children, Element, Gui, Section};
 use winit::application::ApplicationHandler;
 
 extern crate examples_common;
@@ -34,8 +34,9 @@ pub struct Application {
 fn create_select(label: &str) -> Element<()> {
     let mut element = Element::new().with_label(label);
     element
-        .event_listeners
-        .insert(rugui::events::EventTypes::Select, ());
+        .events
+        .listen(rugui::events::EventTypes::Select, ());
+    element.events.listen(rugui::events::EventTypes::Input, ());
     element.styles.selectable = true;
 
     element
@@ -59,7 +60,7 @@ impl ApplicationHandler for App {
         let size = window.inner_size();
         let mut gui = Gui::new(size.into(), &drawing.device, &drawing.queue);
 
-        let mut rows = Element::new().with_label("rows");
+        let rows = Element::new().with_label("rows");
         let mut row1 = create_select("row1");
         row1.text_str("Good job!");
         row1.styles.resize_text(50.0);
@@ -68,7 +69,9 @@ impl ApplicationHandler for App {
         row2.styles.text_mut().color = Color::WHITE;
         row2.styles.resize_text(50.0);
         let mut row3 = create_select("row3");
-        let mut row4 = create_select("row4");
+        row3.text_str("Write something: ");
+        row3.styles.resize_text(50.0);
+        let row4 = create_select("row4");
         let mut row5 = Element::new().with_label("row5");
         {
             let children = Vec::from([
@@ -126,7 +129,7 @@ impl ApplicationHandler for App {
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
-        window_id: winit::window::WindowId,
+        _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
         let this = match self {
@@ -135,10 +138,9 @@ impl ApplicationHandler for App {
         };
 
         this.gui.update();
-        match rugui::winit::event(&event) {
-            Some(event) => this.gui.event(event),
-            None => (),
-        }
+        rugui::winit::event(&mut this.gui, &event);
+
+
         while let Some(event) = this.gui.poll_event() {
             match event.element_event {
                 rugui::events::ElementEvent::Select => {
@@ -153,6 +155,14 @@ impl ApplicationHandler for App {
                         element.text_str("")
                     }
                     this.window.request_redraw();
+                }
+                rugui::events::ElementEvent::Input { text } => {
+                    if let Some(element) = this.gui.get_element_mut(event.key) {
+                        let mut field = element.text().clone().unwrap_or(&"".to_string()).to_string();
+                        field.push_str(&text);
+                        element.text_string(field);
+                        this.window.request_redraw();
+                    }
                 }
                 _ => {}
             }
