@@ -1,9 +1,9 @@
 [package]
 name = "rugui"
 description = "Real-time GUI library for games"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
-repository = "https://github.com/it-2001/rugui"
+repository = "https://github.com/antosatko/rugui"
 readme = "readme.md"
 keywords = ["gamedev", "graphics", "gui", "retained_gui", "wgpu"]
 categories = ["rendering", "gui", "game-development", "rendering::engine"]
@@ -25,7 +25,7 @@ clipboard = {version = "0.5.0", optional = true}
 #! ```toml
 #! rugui = { version = "*", default-features = false }
 #! ```
-default = ["full"]
+default = ["winit"]
 ## adds winit module that helps with integration of winit events
 winit = ["dep:winit"]
 ## enables clipboard integration
