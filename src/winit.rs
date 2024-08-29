@@ -57,9 +57,9 @@ pub fn event<Msg: Clone>(gui: &mut crate::Gui<Msg>, event: &WinitWindowEvent) {
                     Key::Named(NamedKey::Control) => {
                         gui.input.control_pressed = true;
                     }
+                    #[cfg(feature = "clipboard")]
                     Key::Character(c) if gui.input.control_pressed =>
                     {
-                        #[cfg(feature = "clipboard")]
                         if c.as_str() == "v" {
                             use clipboard::ClipboardProvider;
                             if let Some(clip) = &mut gui.clipboard_ctx {
