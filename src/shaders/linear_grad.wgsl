@@ -4,7 +4,7 @@ struct VertexInput {
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) v_grad_coords: vec2<f32>,
+    @location(0) clip_position: vec2<f32>,
     
 }
 
@@ -27,7 +27,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
     // Calculate vertex position
     var position = vertex_position(in.index);
-    out.v_grad_coords = position + 0.5;
+    out.clip_position = position + 0.5;
 
     // Scale and rotate the position
     var scale = vec2(size.x * position.x, size.y * position.y);
@@ -52,7 +52,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0)vec4<f32> {
-    var gradient_factor = dot(in.v_grad_coords - start, end - start) / dot(end - start, end - start);
+    var gradient_factor = dot(in.clip_position - start, end - start) / dot(end - start, end - start);
     var color = mix(start_color, end_color, clamp(gradient_factor, 0.0, 1.0));
     return vec4<f32>(color.rgb, color.a*alpha);
 }

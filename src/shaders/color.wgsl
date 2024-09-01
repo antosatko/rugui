@@ -6,6 +6,7 @@ struct VertexInput {
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
+    @location(0) clip_position: vec2<f32>,
 }
 
 @group(0)@binding(0) var<uniform> screen_size: vec2<f32>;
@@ -14,6 +15,7 @@ struct VertexOutput {
 @group(1)@binding(1) var<uniform> size: vec2<f32>;
 @group(1)@binding(2) var<uniform> rotation: f32;
 @group(1)@binding(3) var<uniform> alpha: f32;
+@group(1)@binding(4) var<uniform> edges: vec2<f32>;
 
 @group(2)@binding(0) var<uniform> color: vec4<f32>;
 
@@ -24,9 +26,10 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
     // Calculate vertex position
     var position = vertex_position(in.index);
+    out.clip_position = size * position*2.0;
 
     // Scale and rotate the position
-    var scale = vec2(size.x * position.x, size.y * position.y);
+    var scale = size * position;
     var cos_angle = cos(rotation);
     var sin_angle = sin(rotation);
     var rotated_position = vec2(
@@ -48,7 +51,17 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0)vec4<f32> {
-    return vec4<f32>(color.rgb, color.a*alpha);
+    var p = abs(in.clip_position);
+    var s = size - edges.x;
+    if p.x < s.x || p.y < s.y {
+        return vec4<f32>(color.rgb, color.a*alpha);
+    }
+    var dist = distance(p, s);
+    if dist < edges.x {
+        return vec4<f32>(color.rgb, color.a*alpha);
+    }
+    var glow = 1.0 - ((dist - edges.x) / edges.y);
+    return vec4<f32>(color.rgb, color.a*alpha*glow);
 }
 
 

@@ -3,10 +3,7 @@
 //! ## Feature flags
 #![doc = document_features::document_features!(feature_label = r#"<span class="stab portability"><code>{feature}</code></span>"#)]
 
-use std::{
-    collections::HashMap,
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 #[cfg(feature = "clipboard")]
 use clipboard::{ClipboardContext, ClipboardProvider};
@@ -14,7 +11,7 @@ use cosmic_text::{Attrs, FontSystem, Metrics, SwashCache};
 use events::{ElementEvent, EventPoll, EventTypes, WindowEvent};
 use image::{DynamicImage, GenericImage};
 use render::{GpuBound, RenderElement, RenderLinearGradient, RenderRadialGradient};
-use styles::{Size, StyleSheet};
+use styles::{Side, Size, StyleSheet};
 
 pub mod events;
 mod render;
@@ -23,9 +20,8 @@ pub mod texture;
 #[cfg(feature = "winit")]
 pub mod winit;
 
-
 /// Context for the GUI engine
-/// 
+///
 /// Always have only one in your application in order to save resources.
 pub struct Gui<Msg>
 where
@@ -144,6 +140,9 @@ where
                 position: Point::new(self.size.0 as f32 / 2.0, self.size.1 as f32 / 2.0),
                 scale: Point::new(self.size.0 as f32, self.size.1 as f32),
                 rotation: 0.0,
+                edges_radius: 0.0,
+                edges_smooth: 0.0,
+                font_size: 0.0,
             };
             self.element_transform(key, &transform);
         }
@@ -507,6 +506,9 @@ where
                 position: Point::new(size.0 as f32 / 2.0, size.1 as f32 / 2.0),
                 scale: Point::new(size.0 as f32, size.1 as f32),
                 rotation: 0.0,
+                edges_radius: 0.0,
+                edges_smooth: 0.0,
+                font_size: 0.0,
             },
         );
     }
@@ -535,6 +537,9 @@ where
                 position: Point::new(self.size.0 as f32 / 2.0, self.size.1 as f32 / 2.0),
                 scale: Point::new(self.size.0 as f32, self.size.1 as f32),
                 rotation: 0.0,
+                edges_radius: 0.0,
+                edges_smooth: 0.0,
+                font_size: 0.0,
             },
         );
     }
@@ -608,6 +613,7 @@ where
             None => return,
         };
         if element.styles.flags.recalc_transform {
+            element.styles.flags.dirty_edges = true;
             self.traverse_elements_mut(key, &mut |e| {
                 e.styles.flags.recalc_transform = true;
             });
@@ -645,15 +651,25 @@ where
                 styles::Rotation::AbsRad(rad) => rad,
                 styles::Rotation::AbsPercent(percent) => (percent / 50.0) * std::f32::consts::PI,
             };
-            let transform = ElementTransform {
+            let mut transform = ElementTransform {
                 position: Point::new(x, y),
                 scale: Point::new(width, height),
                 rotation,
+                edges_radius: 0.0,
+                edges_smooth: 0.0,
+                font_size: 0.0,
             };
+            let edges_radius = transform.calc_side(&element.styles.background.edges.radius, &self.size);
+            let edges_smooth = transform.calc_side(&element.styles.background.edges.smooth, &self.size);
+            transform.edges_radius = edges_radius;
+            transform.edges_smooth = edges_smooth;
+            let font_size = transform.calc_side(&element.styles.text.size, &self.size);
+            transform.font_size = font_size;
             let pre_collision = element.transform.point_collision(self.input.mouse);
 
             element.transform = transform;
             element.styles.flags.dirty_transform = true;
+            element.styles.flags.dirty_edges = true;
             element.styles.flags.recalc_transform = false;
 
             let post_collision = element.transform.point_collision(self.input.mouse);
@@ -791,6 +807,9 @@ where
                         position,
                         scale: Point::new(transform.scale.x, space),
                         rotation: transform.rotation,
+                        edges_radius: 0.0,
+                        edges_smooth: 0.0,
+                        font_size: 0.0,
                     };
                     y += space;
                     remaining_height -= space;
@@ -833,6 +852,9 @@ where
                         position,
                         scale: Point::new(space, transform.scale.y),
                         rotation: transform.rotation,
+                        edges_radius: 0.0,
+                        edges_smooth: 0.0,
+                        font_size: 0.0,
                     };
                     self.element_transform(element, &transform);
                     x += space;
@@ -875,6 +897,9 @@ pub(crate) struct ElementTransform {
     pub scale: Point,
     /// Rotation in radians
     pub rotation: f32,
+    pub edges_radius: f32,
+    pub edges_smooth: f32,
+    pub font_size: f32,
 }
 
 impl ElementTransform {
@@ -883,6 +908,9 @@ impl ElementTransform {
             position: Point::new(0.0, 0.0),
             scale: Point::new(0.0, 0.0),
             rotation: 0.0,
+            edges_radius: 0.0,
+            edges_smooth: 0.0,
+            font_size: 20.0,
         }
     }
 
@@ -900,8 +928,57 @@ impl ElementTransform {
             && point_rotated.y >= y
             && point_rotated.y <= y_max
     }
-}
 
+    pub fn calc_side(&self, (size, side): &(Size, Side), view_port: &(u32, u32)) -> f32 {
+        let view_port = (view_port.0 as f32, view_port.1 as f32);
+        match side {
+            Side::Width => {
+                let a = self.scale.x;
+                match size {
+                    Size::None => 0.0,
+                    Size::Fill => a,
+                    Size::Pixel(p) => *p,
+                    Size::Percent(p) => a * (*p / 100.),
+                    Size::AbsFill => view_port.0,
+                    Size::AbsPercent(p) => view_port.0 * (*p / 100.),
+                }
+            }
+            Side::Height => {
+                let a = self.scale.y;
+                match size {
+                    Size::None => 0.0,
+                    Size::Fill => a,
+                    Size::Pixel(p) => *p,
+                    Size::Percent(p) => a * (*p / 100.),
+                    Size::AbsFill => view_port.1,
+                    Size::AbsPercent(p) => view_port.1 * (*p / 100.),
+                }
+            }
+            Side::Max => {
+                let a = self.scale.y.max(self.scale.x);
+                match size {
+                    Size::None => 0.0,
+                    Size::Fill => a,
+                    Size::Pixel(p) => *p,
+                    Size::Percent(p) => a * (*p / 100.),
+                    Size::AbsFill => view_port.0.max(view_port.1),
+                    Size::AbsPercent(p) => view_port.0.max(view_port.1) * (*p / 100.),
+                }
+            }
+            Side::Min => {
+                let a = self.scale.y.min(self.scale.x);
+                match size {
+                    Size::None => 0.0,
+                    Size::Fill => a,
+                    Size::Pixel(p) => *p,
+                    Size::Percent(p) => a * (*p / 100.),
+                    Size::AbsFill => view_port.0.min(view_port.1),
+                    Size::AbsPercent(p) => view_port.0.min(view_port.1) * (*p / 100.),
+                }
+            }
+        }
+    }
+}
 
 /// Most basic building block of the Rugui library
 #[derive(Default)]
@@ -1070,6 +1147,19 @@ where
             render_element.set_color(color, queue, device);
             self.styles.flags.dirty_color = false;
         }
+        if self.styles.flags.dirty_edges {
+            let radius = self.transform.edges_radius;
+            let smooth = self.transform.edges_smooth;
+            queue.write_buffer(
+                &render_element.edges_buffer,
+                0,
+                bytemuck::cast_slice(&[
+                    radius,
+                    smooth,
+                ]),
+            );
+            self.styles.flags.dirty_edges = false;
+        }
         if self.styles.flags.dirty_alpha {
             let alpha = self.styles.alpha;
             render_element.data.alpha = alpha;
@@ -1124,8 +1214,8 @@ where
                         Some(tb) => {
                             let mut tb = tb.borrow_with(font_system);
                             tb.set_metrics(Metrics::new(
-                                self.styles.text.size,
-                                self.styles.text.line_height,
+                                self.transform.font_size,
+                                self.transform.font_size+3.0,
                             ));
                             tb.set_size(Some(self.transform.scale.x), Some(self.transform.scale.y));
                             let attrs = Attrs::new();
@@ -1158,7 +1248,10 @@ where
                         None => {
                             let mut tb = cosmic_text::Buffer::new(
                                 font_system,
-                                Metrics::new(self.styles.text.size, self.styles.text.line_height),
+                                Metrics::new(
+                                    self.transform.font_size,
+                                    self.transform.font_size+3.0,
+                                ),
                             );
                             let mut tb = tb.borrow_with(font_system);
                             tb.set_size(Some(self.transform.scale.x), Some(self.transform.scale.y));
@@ -1194,7 +1287,7 @@ where
                     *dirty = false;
                 }
             }
-            None => (),
+            None => render_element.text = None
         }
 
         render_element.write_all(queue);
@@ -1210,13 +1303,10 @@ where
     }
 
     /// Configures text rendered inside the `Element`
-    pub fn text_mut(&mut self) -> Option<&mut String> {
-        match &mut self.text {
-            Some((str, dirty)) => {
-                *dirty = true;
-                Some(str)
-            }
-            None => None,
+    pub fn set_text(&mut self, text: Option<String>) {
+        match text {
+            Some(text) => self.text = Some((text, true)),
+            None => self.text = None,
         }
     }
 

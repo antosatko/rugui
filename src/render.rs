@@ -742,6 +742,7 @@ pub struct RenderElement {
     pub size_buffer: wgpu::Buffer,
     pub rotation_buffer: wgpu::Buffer,
     pub alpha_buffer: wgpu::Buffer,
+    pub edges_buffer: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
     pub color: Option<RenderColor>,
     pub texture: Option<Arc<Texture>>,
@@ -814,16 +815,20 @@ pub struct RenderElementData {
     pub rotation: f32,
     pub color: Color,
     pub alpha: f32,
+    pub edges: [f32; 2],
+    pub text_size: f32,
 }
 
 impl RenderElementData {
-    pub fn new(center: [f32; 2], size: [f32; 2], rotation: f32, color: Color, alpha: f32) -> Self {
+    pub fn new(center: [f32; 2], size: [f32; 2], rotation: f32, color: Color, alpha: f32, edges: [f32; 2], text_size: f32) -> Self {
         Self {
             center,
             size,
             rotation,
             color,
             alpha,
+            edges,
+            text_size,
         }
     }
 
@@ -838,6 +843,8 @@ impl RenderElementData {
             a: 0.0,
         },
         alpha: 0.0,
+        edges: [0.0, 0.0],
+        text_size: 20.0,
     };
 
     pub(crate) fn update_transform(&mut self, transform: &crate::ElementTransform) {
@@ -907,6 +914,16 @@ impl RenderElement {
                 },
                 count: None,
             },
+            wgpu::BindGroupLayoutEntry {
+                binding: 4,
+                visibility: wgpu::ShaderStages::all(),
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
         ],
     };
 
@@ -932,9 +949,16 @@ impl RenderElement {
             mapped_at_creation: false,
         });
 
-        let aplha_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let alpha_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Rotation Buffer"),
             size: std::mem::size_of::<[f32; 1]>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let edges_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Rotation Buffer"),
+            size: std::mem::size_of::<[f32; 2]>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -972,7 +996,15 @@ impl RenderElement {
                 wgpu::BindGroupEntry {
                     binding: 3,
                     resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &aplha_buffer,
+                        buffer: &alpha_buffer,
+                        offset: 0,
+                        size: None,
+                    }),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                        buffer: &edges_buffer,
                         offset: 0,
                         size: None,
                     }),
@@ -985,7 +1017,8 @@ impl RenderElement {
             center_buffer,
             size_buffer,
             rotation_buffer,
-            alpha_buffer: aplha_buffer,
+            alpha_buffer,
+            edges_buffer,
             bind_group,
             color: None,
             texture: None,

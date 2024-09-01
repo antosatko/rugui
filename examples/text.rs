@@ -56,7 +56,7 @@ impl ApplicationHandler for App {
         styles.transfomr_mut().rotation = Rotation::Deg(25.0);
         *styles.bg_color_mut() = Color::MAGENTA;
 
-        styles.resize_text(100.0);
+        styles.text_size_mut().0 = Size::Pixel(50.0);
         element.text_str("A rotated text looks pretty ugly, so maybe try to use it as little as possible.");
 
         let mut small_box = Element::new();

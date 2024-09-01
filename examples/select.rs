@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use examples_common::Drawing;
-use rugui::{styles::{Size, Color}, Children, Element, Gui, Section};
+use rugui::{styles::{Color, Side, Size}, Children, Element, Gui, Section};
 use winit::application::ApplicationHandler;
 
 extern crate examples_common;
@@ -63,14 +63,14 @@ impl ApplicationHandler for App {
         let rows = Element::new().with_label("rows");
         let mut row1 = create_select("row1");
         row1.text_str("Good job!");
-        row1.styles.resize_text(50.0);
+        *row1.styles.text_size_mut() = (Size::Percent(40.0), Side::Height);
         let mut row2 = Element::new().with_label("row2");
         row2.text_str("Try pressing Tab..");
         row2.styles.text_mut().color = Color::WHITE;
-        row2.styles.resize_text(50.0);
+        *row2.styles.text_size_mut() = (Size::Percent(40.0), Side::Height);
         let mut row3 = create_select("row3");
         row3.text_str("Write something: ");
-        row3.styles.resize_text(50.0);
+        *row3.styles.text_size_mut() = (Size::Percent(40.0), Side::Height);
         let row4 = create_select("row4");
         let mut row5 = Element::new().with_label("row5");
         {

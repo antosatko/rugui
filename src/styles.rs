@@ -1,7 +1,6 @@
 //! `Element` styles
 
-
-use std::sync::Arc;
+use std::{default, sync::Arc};
 
 use crate::Point;
 use bytemuck::Zeroable;
@@ -47,15 +46,18 @@ pub struct StyleSheet {
 
 #[derive(Debug, Clone)]
 pub struct Text {
-    pub size: f32,
-    pub line_height: f32,
+    pub size: (Size, Side),
     pub color: Color,
     pub justify: Position,
 }
 
 impl Default for Text {
     fn default() -> Self {
-        Self { size: 20.0, line_height: 23.0, color: Color::default(), justify: Position::default() }
+        Self {
+            size: (Size::Pixel(20.0), Side::Max),
+            color: Color::default(),
+            justify: Position::default(),
+        }
     }
 }
 
@@ -98,15 +100,15 @@ pub struct Transform {
     /// Not implemented yet
     pub padding: Size,
     /// Performs rounding operation for the position of the element
-    /// 
+    ///
     /// Use this with scale_round to render with pixel precision
     pub position_round: Round,
     /// Performs rounding operation for the scale of the element
-    /// 
+    ///
     /// Use this with position_round to render with pixel precision
     pub scale_round: Round,
     /// Performs rounding operation for the rotation of the element
-    /// 
+    ///
     /// This will alwas force element into right angles
     pub rotation_round: Round,
 }
@@ -117,7 +119,7 @@ pub enum Round {
     Round,
     Floor,
     #[default]
-    None
+    None,
 }
 
 #[derive(Debug)]
@@ -130,6 +132,7 @@ pub struct Flags {
     pub(crate) dirty_transform: bool,
     pub(crate) dirty_border: bool,
     pub(crate) dirty_alpha: bool,
+    pub(crate) dirty_edges: bool,
 
     pub(crate) recalc_transform: bool,
 }
@@ -145,6 +148,7 @@ impl Default for Flags {
             dirty_transform: true,
             dirty_border: true,
             dirty_alpha: true,
+            dirty_edges: true,
 
             recalc_transform: true,
         }
@@ -181,6 +185,7 @@ impl Default for StyleSheet {
                 texture: None,
                 lin_gradient: None,
                 rad_gradient: None,
+                edges: Edges::default(),
             },
             border: Border {
                 background: Background {
@@ -188,6 +193,7 @@ impl Default for StyleSheet {
                     texture: None,
                     lin_gradient: None,
                     rad_gradient: None,
+                    edges: Edges::default(),
                 },
                 width: Size::None,
                 min_width: Size::None,
@@ -423,11 +429,13 @@ impl StyleSheet {
         self.visible = visible;
     }
 
-    pub fn resize_text(&mut self, size: f32) {
-        let lines = self.text.line_height - self.text.size;
-        self.text.size = size;
-        self.text.line_height = size + lines;
+    pub fn get_text_size(&self) -> &(Size, Side) {
+        &self.text.size
+    }
+
+    pub fn text_size_mut(&mut self) -> &mut (Size, Side) {
         self.flags.dirty_text = true;
+        &mut self.text.size
     }
 
     pub fn set_alpha(&mut self, alpha: f32) {
@@ -437,6 +445,15 @@ impl StyleSheet {
 
     pub fn get_alpha(&mut self) -> f32 {
         self.alpha
+    }
+
+    pub fn get_edges(&self) -> &Edges {
+        &self.background.edges
+    }
+
+    pub fn edges_mut(&mut self) -> &mut Edges {
+        self.flags.dirty_edges = true;
+        &mut self.background.edges
     }
 }
 
@@ -512,8 +529,18 @@ pub enum Size {
     Percent(f32),
     AbsFill,
     AbsPercent(f32),
-    /*Inch(f32),
-    Cm(f32),*/
+}
+
+#[derive(Clone, Copy, Default, Debug)]
+/// Chooses which side should be used in a calculation
+///
+/// This helps for styles that apply for both width and height
+pub enum Side {
+    Width,
+    Height,
+    #[default]
+    Max,
+    Min,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -554,13 +581,25 @@ pub struct Background {
     pub color: Color,
     pub texture: Option<Arc<Texture>>,
     /// Linear gradient of the element
-    ///
-    /// Not implemented yet
     pub lin_gradient: Option<LinearGradient>,
     /// Radial gradient of the element
-    ///
-    /// Not implemented yet
     pub rad_gradient: Option<RadialGradient>,
+    pub edges: Edges,
+}
+
+#[derive(Debug, Clone)]
+pub struct Edges {
+    pub radius: (Size, Side),
+    pub smooth: (Size, Side),
+}
+
+impl Default for Edges {
+    fn default() -> Self {
+        Self {
+            radius: (Size::None, Side::Min),
+            smooth: (Size::None, Side::Min),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -607,6 +646,12 @@ impl Color {
         r: 1.0,
         g: 1.0,
         b: 1.0,
+        a: 1.0,
+    };
+    pub const GRAY: Self = Self {
+        r: 0.5,
+        g: 0.5,
+        b: 0.5,
         a: 1.0,
     };
 
