@@ -757,3 +757,115 @@ impl From<Color> for [f32; 4] {
         [color.r, color.g, color.b, color.a]
     }
 }
+
+
+mod styles_proposition {
+    struct Styles {
+
+    }
+
+    #[derive(Debug, Default, Clone, Copy)]
+    enum Rotation {
+        Deg(f32),
+        Rad(f32),
+        Right(u32),
+        #[default]
+        None,
+    }
+    
+    /// Returns value
+    enum Values {
+        /// Perform an operation
+        Expr(Box<Expression>),
+        /// return a value
+        Value(Value),
+
+        /// `None` usually defaults to `Not applicable` or `0`
+        /// 
+        /// If the value has to be something, it defaults to `Fill`
+        None,
+    }
+    
+    /// Performs an operation
+    struct Expression {
+        /// Left side of operation
+        left: Values,
+        /// Right side of operation
+        right: Values,
+        /// Operator
+        op: Op,
+    }
+
+    /// Choose measured unit
+    pub enum Value {
+        /// This is the space that is given to the element
+        Container(RValue, Side),
+        /// This is the space that is given to the first element
+        ViewPort(RValue, Side),
+        /// This is the space that the image fits into
+        Image(RValue, Side),
+        /// This is the smallest space that the text fits into
+        Text(RValue, Side),
+        /// This is the smallest space that the content fits into
+        /// 
+        /// returns based on criteria:
+        /// 1. image, text - max(image, text)
+        /// 2. image - image
+        /// 3. text - text
+        /// 4. ___ - [1px, 1px]
+        Content(RValue, Side),
+        /// Size in pixels
+        Pixel(f32),
+
+        /// `None` usually defaults to filling available space
+        None,
+    }
+
+    /// Returns size of a specified side/equation of the measured unit
+    pub enum Side {
+        /// Returns width of the measured unit
+        Width,
+        /// Returns height of the measured unit
+        Height,
+        /// Returns the diameter of the measured unit
+        Diameter,
+
+        /// Returns result of `max(Width, Height)`
+        Max,
+        /// Returns result of `min(Width, Height)`
+        Min,
+        /// Returns result of `Width + Height`
+        Sum,
+        /// Returns result of `abs(Width - Height)`
+        Distance,
+        /// Reutrns result of `(Widht + Height) / 2`
+        Midpoint,
+    }
+
+    /// Performs operation on size
+    pub enum RValue {
+        /// Returns a percentage of size `(size / 100) * Percent`
+        Percent(f32),
+        /// Returns a fraction of size `size * Fraction`
+        Fraction(f32),
+        /// Returns half of size `size / 2`
+        Half,
+        /// Returns whole `size`
+        Full,
+    }
+
+    pub enum Op {
+        Add,
+        Sub,
+        Mul,
+        Div,
+        Mod,
+        Min,
+        Max,
+        Pow,
+        Sqrt,
+        Round,
+        Floor,
+        Ceil,
+    }
+}

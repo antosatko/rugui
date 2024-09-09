@@ -107,6 +107,7 @@ impl ApplicationHandler for App {
         drag_element.styles.transfomr_mut().height = Size::AbsPercent(10.0);
         drag_element.styles.transfomr_mut().max_height = Size::Pixel(150.0);
         drag_element.styles.transfomr_mut().max_width = Size::Pixel(150.0);
+        drag_element.styles.transfomr_mut().align = Position::Top;
         *drag_element.styles.bg_color_mut() = Color::RED;
         drag_element.styles.transfomr_mut().position_round = Round::Round;
         drag_element.styles.transfomr_mut().scale_round = Round::Round;
@@ -205,7 +206,7 @@ impl ApplicationHandler for App {
                     } else {
                         continue;
                     };
-                    let size = (this.gui.size().0 as f32 * 0.5, this.gui.size().1 as f32 * 0.5 - 75.0);
+                    let size = (this.gui.size().0 as f32 * 0.5, this.gui.size().1 as f32 * 0.5 - 10.0);
                     let drag_element = this.gui.get_element_mut(this.drag_element).unwrap();
                     drag_element.styles.transfomr_mut().position = Position::Custom(Size::Pixel(pos.x - size.0), Size::Pixel(pos.y - size.1));
                 }
@@ -227,7 +228,7 @@ impl ApplicationHandler for App {
                     .resize(this.window.inner_size().into(), &this.drawing.queue);
                 this.gui.update();
                 this.gui.prepare(&this.drawing.device, &this.drawing.queue);
-                this.drawing.draw(&mut this.gui);
+                this.drawing.draw(&mut this.gui, &this.drawing.queue);
             }
             _ => {}
         }

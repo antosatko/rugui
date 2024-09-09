@@ -870,17 +870,25 @@ where
         self.size
     }
 
-    pub fn render<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) {
+    pub fn render<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue) {
         pass.set_bind_group(0, &self.gpu.dimensions_bind_group, &[]);
 
+        let mut data = Vec::new();
         //self.render_element(*entry_key, pass);
         for e in self.ordered.iter().cloned() {
             if let Some(e) = self.get_element(e) {
                 if let Some(re) = &e.render_element {
+                    data.push(re.data);
                     re.render(&self.gpu.pipelines, pass)
                 }
             }
         }
+
+        /*queue.write_buffer(&self.gpu.instances, 0, bytemuck::cast_slice(&data));
+        pass.set_pipeline(&self.gpu.pipelines.instancing_pipeline);
+        pass.set_vertex_buffer(0, self.gpu.instances.slice(..));
+        println!("data: {data:?}");
+        pass.draw(0..6, 0..data.len() as _)*/
     }
 }
 
@@ -1135,6 +1143,7 @@ where
             self.render_element = Some(RenderElement::zeroed(device))
         }
         let mut render_element = self.render_element.take().unwrap();
+        render_element.data.color = self.styles.background.color;
         if self.styles.flags.dirty_texture {
             if let Some(texture) = &self.styles.background.texture {
                 render_element.set_texture(texture.clone());
@@ -1150,13 +1159,14 @@ where
         if self.styles.flags.dirty_edges {
             let radius = self.transform.edges_radius;
             let smooth = self.transform.edges_smooth;
+            render_element.data.edges = [
+                radius,
+                smooth,
+            ];
             queue.write_buffer(
                 &render_element.edges_buffer,
                 0,
-                bytemuck::cast_slice(&[
-                    radius,
-                    smooth,
-                ]),
+                bytemuck::cast_slice(&render_element.data.edges),
             );
             self.styles.flags.dirty_edges = false;
         }

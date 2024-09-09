@@ -2,17 +2,22 @@ use std::sync::Arc;
 
 use crate::styles::Color;
 use crate::Point;
-use wgpu::include_wgsl;
+use wgpu::{
+    include_wgsl, BindGroupLayoutDescriptor, BindGroupLayoutEntry, VertexAttribute,
+    VertexBufferLayout,
+};
 
 use crate::{
     styles::{LinearGradient, RadialGradient},
-    texture::Texture, ElementTransform,
+    texture::Texture,
+    ElementTransform,
 };
 
 pub struct GpuBound {
     pub dimensions_buffer: wgpu::Buffer,
     pub dimensions_bind_group: wgpu::BindGroup,
     pub size: (u32, u32),
+    pub instances: wgpu::Buffer,
     pub pipelines: Pipelines,
 }
 
@@ -22,6 +27,7 @@ pub struct Pipelines {
     pub texture_pipeline: wgpu::RenderPipeline,
     pub radial_gradient_pipeline: wgpu::RenderPipeline,
     pub linear_gradient_pipeline: wgpu::RenderPipeline,
+    pub instancing_pipeline: wgpu::RenderPipeline,
 }
 
 impl GpuBound {
@@ -287,15 +293,75 @@ impl GpuBound {
                 cache: None,
             });
 
+        let instancing_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Linear Gradient Pipeline Layout"),
+                bind_group_layouts: &[
+                    &dimensions_bind_group_layout,
+                ],
+                push_constant_ranges: &[],
+            });
+
+        let instancing_shaders =
+            device.create_shader_module(include_wgsl!("shaders/instancing.wgsl"));
+            
+        let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Instance buffer layout"),
+            size: std::mem::size_of::<RenderElementData>() as u64 * 500,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let instancing_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Instancing Pipeline"),
+                layout: Some(&instancing_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &instancing_shaders,
+                    entry_point: "vs_main",
+                    buffers: &[RenderElementData::VERTEX_BUFFER_LAYOUT],
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &instancing_shaders,
+                    entry_point: "fs_main",
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    conservative: false,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: None,
+                cache: None,
+            });
+
         Self {
             dimensions_buffer,
             dimensions_bind_group,
             size,
+            instances: instance_buffer,
             pipelines: Pipelines {
                 color_pipeline,
                 texture_pipeline,
                 radial_gradient_pipeline,
                 linear_gradient_pipeline,
+                instancing_pipeline,
             },
         }
     }
@@ -735,7 +801,6 @@ impl RenderLinearGradient {
     }
 }
 
-
 pub struct RenderElement {
     pub data: RenderElementData,
     pub center_buffer: wgpu::Buffer,
@@ -820,7 +885,65 @@ pub struct RenderElementData {
 }
 
 impl RenderElementData {
-    pub fn new(center: [f32; 2], size: [f32; 2], rotation: f32, color: Color, alpha: f32, edges: [f32; 2], text_size: f32) -> Self {
+    pub const VERTEX_BUFFER_LAYOUT: VertexBufferLayout<'static> = VertexBufferLayout {
+        array_stride: std::mem::size_of::<RenderElementData>() as u64,
+        step_mode: wgpu::VertexStepMode::Instance,
+        attributes: &[
+            VertexAttribute {
+                // center
+                format: wgpu::VertexFormat::Float32x2,
+                shader_location: 5,
+                offset: 0,
+            },
+            VertexAttribute {
+                // size
+                format: wgpu::VertexFormat::Float32x2,
+                shader_location: 6,
+                offset: 8,
+            },
+            VertexAttribute {
+                // rotation
+                format: wgpu::VertexFormat::Float32,
+                shader_location: 7,
+                offset: 16,
+            },
+            VertexAttribute {
+                // color
+                format: wgpu::VertexFormat::Float32x4,
+                shader_location: 8,
+                offset: 20,
+            },
+            VertexAttribute {
+                // alpha
+                format: wgpu::VertexFormat::Float32,
+                shader_location: 9,
+                offset: 36,
+            },
+            VertexAttribute {
+                // edges
+                format: wgpu::VertexFormat::Float32x2,
+                shader_location: 10,
+                offset: 40,
+            },
+            VertexAttribute {
+                // text_size
+
+                // TODO: this wont be used
+                format: wgpu::VertexFormat::Float32,
+                shader_location: 11,
+                offset: 48,
+            },
+        ],
+    };
+    pub fn new(
+        center: [f32; 2],
+        size: [f32; 2],
+        rotation: f32,
+        color: Color,
+        alpha: f32,
+        edges: [f32; 2],
+        text_size: f32,
+    ) -> Self {
         Self {
             center,
             size,
@@ -837,10 +960,10 @@ impl RenderElementData {
         size: [0.0, 0.0],
         rotation: 0.0,
         color: Color {
-            r: 0.0,
+            r: 0.5,
             g: 0.0,
             b: 0.0,
-            a: 0.0,
+            a: 0.5,
         },
         alpha: 0.0,
         edges: [0.0, 0.0],
@@ -1066,7 +1189,11 @@ impl RenderElement {
             0,
             bytemuck::cast_slice(&[self.data.rotation]),
         );
-        queue.write_buffer(&self.alpha_buffer, 0, bytemuck::cast_slice(&[self.data.alpha]));
+        queue.write_buffer(
+            &self.alpha_buffer,
+            0,
+            bytemuck::cast_slice(&[self.data.alpha]),
+        );
     }
 
     pub fn bind(&self) -> &wgpu::BindGroup {
