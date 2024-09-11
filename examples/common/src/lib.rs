@@ -69,7 +69,7 @@ impl Drawing {
         }
     }
 
-    pub fn draw<Message: Clone>(&self, gui: &mut Gui<Message>, queue: &wgpu::Queue) {
+    pub fn draw<Message: Clone>(&self, gui: &mut Gui<Message>/*, queue: &wgpu::Queue */) {
         if self.size.0 == 0 || self.size.1 == 0 {
             return;
         }
@@ -99,7 +99,7 @@ impl Drawing {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            gui.render(&mut pass, queue);
+            gui.render(&mut pass);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

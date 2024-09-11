@@ -228,7 +228,7 @@ impl ApplicationHandler for App {
                     .resize(this.window.inner_size().into(), &this.drawing.queue);
                 this.gui.update();
                 this.gui.prepare(&this.drawing.device, &this.drawing.queue);
-                this.drawing.draw(&mut this.gui, &this.drawing.queue);
+                this.drawing.draw(&mut this.gui);
             }
             _ => {}
         }

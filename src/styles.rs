@@ -760,40 +760,85 @@ impl From<Color> for [f32; 4] {
 
 
 mod styles_proposition {
-    struct Styles {
+    use crate::{rotate_point, Point};
 
+    pub struct StyleComponent<S> {
+        pub(crate) style: S,
+        pub(crate) dirty: bool,
+    }
+
+    pub struct Styles {
+        pub position: StyleComponent<Position>,
+        pub size: StyleComponent<Values>,
+        pub rotation: StyleComponent<Rotation>,
+        pub bg_color: StyleComponent<Colors>,
+    }
+
+    pub struct Position {
+        parent: Parent,
+        value: PositionValues,
+    }
+
+    pub enum PositionValues {
+        Top,
+        TopLeft,
+        TopRight,
+        Center,
+        CenterLeft,
+        CenterRight,
+        Bottom,
+        BottomLeft,
+        BottomRight,
+        Other((Values, Values))
+    }
+
+    pub enum Parent {
+        ViewPort,
+        Container,
+    }
+
+    pub enum Colors {
+        Rgb(f32, f32, f32),
+        Rgba(f32, f32, f32, f32),
+        Hsl(f32, f32, f32),
+        Cmyk(f32, f32, f32, f32)
     }
 
     #[derive(Debug, Default, Clone, Copy)]
-    enum Rotation {
+    pub enum Rotation {
         Deg(f32),
         Rad(f32),
-        Right(u32),
         #[default]
         None,
+        AbsDeg(f32),
+        AbsRad(f32),
+        AbsNone,
     }
     
     /// Returns value
-    enum Values {
+    pub enum Values {
         /// Perform an operation
         Expr(Box<Expression>),
         /// return a value
         Value(Value),
-
-        /// `None` usually defaults to `Not applicable` or `0`
-        /// 
-        /// If the value has to be something, it defaults to `Fill`
-        None,
+        /// return the result of the function|
+        Function(Box<Function>)
     }
     
     /// Performs an operation
-    struct Expression {
+    pub struct Expression {
         /// Left side of operation
         left: Values,
         /// Right side of operation
         right: Values,
         /// Operator
         op: Op,
+    }
+
+    /// A function
+    pub struct Function {
+        value: Values,
+        fun: Functions,
     }
 
     /// Choose measured unit
@@ -816,9 +861,6 @@ mod styles_proposition {
         Content(RValue, Side),
         /// Size in pixels
         Pixel(f32),
-
-        /// `None` usually defaults to filling available space
-        None,
     }
 
     /// Returns size of a specified side/equation of the measured unit
@@ -838,7 +880,7 @@ mod styles_proposition {
         Sum,
         /// Returns result of `abs(Width - Height)`
         Distance,
-        /// Reutrns result of `(Widht + Height) / 2`
+        /// Reutrns result of `(Width + Height) / 2`
         Midpoint,
     }
 
@@ -863,9 +905,164 @@ mod styles_proposition {
         Min,
         Max,
         Pow,
-        Sqrt,
+    }
+
+    pub enum Functions {
         Round,
         Floor,
         Ceil,
+        Sqrt,
+    }
+
+    impl <S>StyleComponent<S> {
+        pub fn get(&self) -> &S {
+            &self.style
+        }
+        pub fn get_mut(&mut self) -> &S {
+            self.dirty = true;
+            &self.style
+        }
+    }
+
+    impl Position {
+        pub fn calc(&self, contaner: &Container, view_port: &ViewPort) -> Point {
+            let cont = match self.parent {
+                Parent::Container => *contaner,
+                Parent::ViewPort => Container {
+                    image: None,
+                    position: Point::new(view_port.0 / 2.0, view_port.1 / 2.0),
+                    rotation: 0.0,
+                    size: Point::new(view_port.0, view_port.1)
+                }
+            };
+            macro_rules! corner {
+                ($left: expr, $right: expr) => {
+                    {
+                        let point = Point::new(cont.position.x + $left, cont.position.y + $right);
+                        let point = rotate_point(point, cont.position, -cont.rotation);
+                        point
+                    }
+                };
+            }
+            match &self.value {
+                PositionValues::Top => corner!(-cont.position.x, -cont.position.y),
+                PositionValues::TopLeft => corner!(0.0, -cont.position.y),
+                PositionValues::TopRight => corner!(cont.position.x, -cont.position.y),
+                PositionValues::Center => corner!(0.0, 0.0),
+                PositionValues::CenterLeft => corner!(-cont.position.x, 0.0),
+                PositionValues::CenterRight => corner!(cont.position.x, 0.0),
+                PositionValues::Bottom => corner!(-cont.position.x, cont.position.y),
+                PositionValues::BottomLeft => corner!(0.0, cont.position.y),
+                PositionValues::BottomRight => corner!(cont.position.x, cont.position.y),
+                PositionValues::Other((val_x, val_y)) => {
+                    let x = val_x.calc(contaner, view_port);
+                    let y = val_y.calc(contaner, view_port);
+                    corner!(x, y)
+                },
+            }
+        }
+    }
+
+    impl Values {
+        pub fn calc(&self, contaner: &Container, view_port: &ViewPort) -> f32 {
+            match self {
+                Values::Expr(expr) => expr.calc(contaner, view_port),
+                Values::Value(val) => val.calc(contaner, view_port),
+                Values::Function(fun) => fun.fun.calc(fun.value.calc(contaner, view_port))
+            }
+        }
+    }
+
+    impl Functions {
+        pub fn calc(&self, value: f32) -> f32 {
+            match self {
+                Functions::Round => value.round(),
+                Functions::Floor => value.floor(),
+                Functions::Ceil => value.ceil(),
+                Functions::Sqrt => value.sqrt(),
+            }
+        }
+    }
+
+    impl Expression {
+        pub fn calc(&self, contaner: &Container, view_port: &ViewPort) -> f32 {
+            let left = self.left.calc(contaner, view_port);
+            let right = self.right.calc(contaner, view_port);
+            self.op.calc(left, right)
+        }
+    }
+
+    impl Op {
+        pub fn calc(&self, left: f32, right: f32) -> f32 {
+            match self {
+                Op::Add => left + right,
+                Op::Sub => left - right,
+                Op::Mul => left * right,
+                Op::Div => left / right,
+                Op::Mod => left % right,
+                Op::Min => left.min(right),
+                Op::Max => left.max(right),
+                Op::Pow => left.powf(right),
+            }
+        }
+    }
+
+    impl Value {
+        pub fn calc(&self, contaner: &Container, view_port: &ViewPort) -> f32 {
+            match self {
+                Value::Container(r_value, side) => r_value.calc(side.get_size(contaner.size.x, contaner.size.y)),
+                Value::ViewPort(r_value, side) => r_value.calc(side.get_size(view_port.0, view_port.1)),
+                Value::Image(r_value, side) => match &contaner.image {
+                    Some(img) => r_value.calc(side.get_size(img.size.x, img.size.y)),
+                    None => r_value.calc(side.get_size(contaner.size.x, contaner.size.y))
+                },
+                Value::Text(r_value, side) => todo!("Ouch thats gonna take a while"),
+                Value::Content(r_value, side) => todo!("Ouch thats gonna take a while"),
+                Value::Pixel(num) => *num,
+            }
+        }
+    }
+
+    impl RValue {
+        pub fn calc(&self, side: f32) -> f32 {
+            match self {
+                RValue::Percent(p) => side * (p/100.0),
+                RValue::Fraction(f) => side * f,
+                RValue::Half => side / 2.0,
+                RValue::Full => side,
+            }
+        }
+    }
+
+    impl Side {
+        pub fn get_size(&self, width: f32, height: f32) -> f32 {
+            match self {
+                Side::Width => width,
+                Side::Height => height,
+                Side::Diameter => (width*width + height*height).sqrt(),
+                Side::Max => width.max(height),
+                Side::Min => width.min(height),
+                Side::Sum => width + height,
+                Side::Distance => (width - height).abs(),
+                Side::Midpoint => (width + height) / 2.0,
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    pub(crate) struct Container {
+        pub position: Point,
+        pub size: Point,
+        pub rotation: f32,
+        pub image: Option<Rectangle>
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    pub(crate) struct ViewPort(f32, f32);
+
+    #[derive(Debug, Clone, Copy)]
+    pub(crate) struct Rectangle {
+        pub position: Point,
+        pub size: Point,
     }
 }

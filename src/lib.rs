@@ -870,7 +870,7 @@ where
         self.size
     }
 
-    pub fn render<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue) {
+    pub fn render<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>/*, queue: &wgpu::Queue*/) {
         pass.set_bind_group(0, &self.gpu.dimensions_bind_group, &[]);
 
         let mut data = Vec::new();
