@@ -878,7 +878,7 @@ mod styles_proposition {
         Min,
         /// Returns result of `Width + Height`
         Sum,
-        /// Returns result of `abs(Width - Height)`
+        /// Returns result of `Width - Height`
         Distance,
         /// Reutrns result of `(Width + Height) / 2`
         Midpoint,
@@ -912,6 +912,7 @@ mod styles_proposition {
         Floor,
         Ceil,
         Sqrt,
+        Abs,
     }
 
     impl <S>StyleComponent<S> {
@@ -980,6 +981,7 @@ mod styles_proposition {
                 Functions::Floor => value.floor(),
                 Functions::Ceil => value.ceil(),
                 Functions::Sqrt => value.sqrt(),
+                Functions::Abs => value.abs(),
             }
         }
     }
@@ -1043,7 +1045,7 @@ mod styles_proposition {
                 Side::Max => width.max(height),
                 Side::Min => width.min(height),
                 Side::Sum => width + height,
-                Side::Distance => (width - height).abs(),
+                Side::Distance => width - height,
                 Side::Midpoint => (width + height) / 2.0,
             }
         }
