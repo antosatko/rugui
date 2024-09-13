@@ -741,6 +741,12 @@ impl Color {
     }
 }
 
+impl From<(f32, f32, f32, f32)> for Color {
+    fn from((r, g, b, a): (f32, f32, f32, f32)) -> Self {
+        Self { r, g, b, a }
+    }
+}
+
 impl From<[f32; 4]> for Color {
     fn from(array: [f32; 4]) -> Self {
         Self {
@@ -758,25 +764,69 @@ impl From<Color> for [f32; 4] {
     }
 }
 
-
-mod styles_proposition {
-    use crate::{rotate_point, Point};
+pub mod styles_proposition {
+    use crate::{rotate_point, ElementTransform, Point};
 
     pub struct StyleComponent<S> {
         pub(crate) style: S,
         pub(crate) dirty: bool,
     }
 
+    impl<T> StyleComponent<T> {
+        pub fn new(c: T) -> Self {
+            Self {
+                style: c,
+                dirty: true,
+            }
+        }
+    }
+
     pub struct Styles {
         pub position: StyleComponent<Position>,
-        pub size: StyleComponent<Values>,
+        pub width: StyleComponent<Values>,
+        pub height: StyleComponent<Values>,
         pub rotation: StyleComponent<Rotation>,
         pub bg_color: StyleComponent<Colors>,
+        pub margin: StyleComponent<Values>,
+        pub padding: StyleComponent<Values>,
+        pub alpha: StyleComponent<f32>,
+        pub visible: bool,
+        pub selectable: bool,
+        pub z_index: i32,
+    }
+
+    impl Default for Styles {
+        fn default() -> Self {
+            Self {
+                position: Position::new_c(),
+                width: StyleComponent::new(Values::Value(Value::Container(RValue::Full, Side::Width))),
+                height: StyleComponent::new(Values::Value(Value::Container(RValue::Full, Side::Height))),
+                rotation: StyleComponent::new(Rotation::None),
+                bg_color: StyleComponent::new(Colors::Rgba(0.0, 0.0, 0.0, 0.0)),
+                margin: StyleComponent::new(Values::Value(Value::Zero)),
+                padding: StyleComponent::new(Values::Value(Value::Zero)),
+                alpha: StyleComponent::new(1.0),
+                visible: true,
+                selectable: false,
+                z_index: 0,
+            }
+        }
     }
 
     pub struct Position {
         parent: Parent,
         value: PositionValues,
+        offset: (Option<Values>, Option<Values>),
+    }
+
+    impl Position {
+        pub fn new_c() -> StyleComponent<Self> {
+            StyleComponent::new(Self {
+                parent: Parent::Container,
+                value: PositionValues::Center,
+                offset: (None, None),
+            })
+        }
     }
 
     pub enum PositionValues {
@@ -789,7 +839,6 @@ mod styles_proposition {
         Bottom,
         BottomLeft,
         BottomRight,
-        Other((Values, Values))
     }
 
     pub enum Parent {
@@ -801,7 +850,57 @@ mod styles_proposition {
         Rgb(f32, f32, f32),
         Rgba(f32, f32, f32, f32),
         Hsl(f32, f32, f32),
-        Cmyk(f32, f32, f32, f32)
+        Cmyk(f32, f32, f32, f32),
+    }
+
+    impl Colors {
+        pub const TRANSPARENT: Self = Self::Rgba(0.0, 0.0, 0.0, 0.0);
+        pub const WHITE: Self = Self::Rgb(1.0, 1.0, 1.0);
+        pub const BLACK: Self = Self::Rgb(0.0, 0.0, 0.0);
+        pub const RED: Self = Self::Rgb(1.0, 0.0, 0.0);
+        pub const GREEN: Self = Self::Rgb(0.0, 1.0, 0.0);
+        pub const BLUE: Self = Self::Rgb(0.0, 0.0, 1.0);
+        pub const YELLOW: Self = Self::Rgb(1.0, 1.0, 0.0);
+        pub const CYAN: Self = Self::Rgb(0.0, 1.0, 1.0);
+        pub const MAGENTA: Self = Self::Rgb(1.0, 0.0, 1.0);
+        pub const GRAY: Self = Self::Rgb(0.5, 0.5, 0.5);
+        pub const LIGHT_GRAY: Self = Self::Rgb(0.75, 0.75, 0.75);
+        pub const DARK_GRAY: Self = Self::Rgb(0.25, 0.25, 0.25);
+
+        pub fn to_rgba(&self) -> (f32, f32, f32, f32) {
+            match self {
+                Colors::Rgb(r, g, b) => (*r, *g, *b, 1.0),
+                Colors::Rgba(r, g, b, a) => (*r, *g, *b, *a),
+                Colors::Hsl(h, s, l) => {
+                    Self::hsl_to_rgba(*h, *s, *l)
+                }
+                Colors::Cmyk(c, m, y, k) => {
+                    Self::cmyk_to_rgba(*c, *m, *y, *k)
+                }
+            }
+        }
+
+        pub fn hsl_to_rgba(h: f32, s: f32, l: f32) -> (f32, f32, f32, f32) {
+            let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+            let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
+            let m = l - c / 2.0;
+            let (r, g, b) = match h {
+                h if h < 60.0 => (c, x, 0.0),
+                h if h < 120.0 => (x, c, 0.0),
+                h if h < 180.0 => (0.0, c, x),
+                h if h < 240.0 => (0.0, x, c),
+                h if h < 300.0 => (x, 0.0, c),
+                _ => (c, 0.0, x),
+            };
+            (r + m, g + m, b + m, 1.0)
+        }
+
+        pub fn cmyk_to_rgba(c: f32, m: f32, y: f32, k: f32) -> (f32, f32, f32, f32) {
+            let r = 1.0 - (c * (1.0 - k) + k);
+            let g = 1.0 - (m * (1.0 - k) + k);
+            let b = 1.0 - (y * (1.0 - k) + k);
+            (r, g, b, 1.0)
+        }
     }
 
     #[derive(Debug, Default, Clone, Copy)]
@@ -814,7 +913,20 @@ mod styles_proposition {
         AbsRad(f32),
         AbsNone,
     }
-    
+
+    impl Rotation {
+        pub fn calc(&self, container: &Container, view_port: &ViewPort) -> f32 {
+            match self {
+                Rotation::Deg(deg) => *deg + container.rotation,
+                Rotation::Rad(rad) => rad.to_degrees() + container.rotation,
+                Rotation::None => container.rotation,
+                Rotation::AbsDeg(deg) => *deg,
+                Rotation::AbsRad(rad) => rad.to_degrees(),
+                Rotation::AbsNone => 0.0,
+            }
+        }
+    }
+
     /// Returns value
     pub enum Values {
         /// Perform an operation
@@ -822,9 +934,9 @@ mod styles_proposition {
         /// return a value
         Value(Value),
         /// return the result of the function|
-        Function(Box<Function>)
+        Function(Box<Function>),
     }
-    
+
     /// Performs an operation
     pub struct Expression {
         /// Left side of operation
@@ -852,7 +964,7 @@ mod styles_proposition {
         /// This is the smallest space that the text fits into
         Text(RValue, Side),
         /// This is the smallest space that the content fits into
-        /// 
+        ///
         /// returns based on criteria:
         /// 1. image, text - max(image, text)
         /// 2. image - image
@@ -861,6 +973,8 @@ mod styles_proposition {
         Content(RValue, Side),
         /// Size in pixels
         Pixel(f32),
+        /// Shortcut for `Value::Pixel(0.0)`
+        Zero,
     }
 
     /// Returns size of a specified side/equation of the measured unit
@@ -915,35 +1029,48 @@ mod styles_proposition {
         Abs,
     }
 
-    impl <S>StyleComponent<S> {
+    impl<S> StyleComponent<S> {
         pub fn get(&self) -> &S {
             &self.style
         }
-        pub fn get_mut(&mut self) -> &S {
+        pub fn get_mut(&mut self) -> &mut S {
             self.dirty = true;
-            &self.style
+            &mut self.style
         }
     }
 
     impl Position {
-        pub fn calc(&self, contaner: &Container, view_port: &ViewPort) -> Point {
+        pub fn calc(&self, container: &Container, view_port: &ViewPort) -> Point {
             let cont = match self.parent {
-                Parent::Container => *contaner,
+                Parent::Container => *container,
                 Parent::ViewPort => Container {
                     image: None,
                     position: Point::new(view_port.0 / 2.0, view_port.1 / 2.0),
                     rotation: 0.0,
-                    size: Point::new(view_port.0, view_port.1)
-                }
+                    size: Point::new(view_port.0, view_port.1),
+                },
             };
+            let offset_x = self
+                .offset
+                .0
+                .as_ref()
+                .map(|v| v.calc(container, view_port))
+                .unwrap_or(0.0);
+            let offset_y = self
+                .offset
+                .1
+                .as_ref()
+                .map(|v| v.calc(container, view_port))
+                .unwrap_or(0.0);
             macro_rules! corner {
-                ($left: expr, $right: expr) => {
-                    {
-                        let point = Point::new(cont.position.x + $left, cont.position.y + $right);
-                        let point = rotate_point(point, cont.position, -cont.rotation);
-                        point
-                    }
-                };
+                ($left: expr, $right: expr) => {{
+                    let point = Point::new(
+                        cont.position.x + $left + offset_x,
+                        cont.position.y + $right + offset_y,
+                    );
+                    let point = rotate_point(point, cont.position, -cont.rotation);
+                    point
+                }};
             }
             match &self.value {
                 PositionValues::Top => corner!(-cont.position.x, -cont.position.y),
@@ -955,11 +1082,6 @@ mod styles_proposition {
                 PositionValues::Bottom => corner!(-cont.position.x, cont.position.y),
                 PositionValues::BottomLeft => corner!(0.0, cont.position.y),
                 PositionValues::BottomRight => corner!(cont.position.x, cont.position.y),
-                PositionValues::Other((val_x, val_y)) => {
-                    let x = val_x.calc(contaner, view_port);
-                    let y = val_y.calc(contaner, view_port);
-                    corner!(x, y)
-                },
             }
         }
     }
@@ -969,7 +1091,7 @@ mod styles_proposition {
             match self {
                 Values::Expr(expr) => expr.calc(contaner, view_port),
                 Values::Value(val) => val.calc(contaner, view_port),
-                Values::Function(fun) => fun.fun.calc(fun.value.calc(contaner, view_port))
+                Values::Function(fun) => fun.fun.calc(fun.value.calc(contaner, view_port)),
             }
         }
     }
@@ -1012,15 +1134,20 @@ mod styles_proposition {
     impl Value {
         pub fn calc(&self, contaner: &Container, view_port: &ViewPort) -> f32 {
             match self {
-                Value::Container(r_value, side) => r_value.calc(side.get_size(contaner.size.x, contaner.size.y)),
-                Value::ViewPort(r_value, side) => r_value.calc(side.get_size(view_port.0, view_port.1)),
+                Value::Container(r_value, side) => {
+                    r_value.calc(side.get_size(contaner.size.x, contaner.size.y))
+                }
+                Value::ViewPort(r_value, side) => {
+                    r_value.calc(side.get_size(view_port.0, view_port.1))
+                }
                 Value::Image(r_value, side) => match &contaner.image {
                     Some(img) => r_value.calc(side.get_size(img.size.x, img.size.y)),
-                    None => r_value.calc(side.get_size(contaner.size.x, contaner.size.y))
+                    None => r_value.calc(side.get_size(contaner.size.x, contaner.size.y)),
                 },
                 Value::Text(r_value, side) => todo!("Ouch thats gonna take a while"),
                 Value::Content(r_value, side) => todo!("Ouch thats gonna take a while"),
                 Value::Pixel(num) => *num,
+                Value::Zero => 0.0,
             }
         }
     }
@@ -1028,7 +1155,7 @@ mod styles_proposition {
     impl RValue {
         pub fn calc(&self, side: f32) -> f32 {
             match self {
-                RValue::Percent(p) => side * (p/100.0),
+                RValue::Percent(p) => side * (p / 100.0),
                 RValue::Fraction(f) => side * f,
                 RValue::Half => side / 2.0,
                 RValue::Full => side,
@@ -1041,7 +1168,7 @@ mod styles_proposition {
             match self {
                 Side::Width => width,
                 Side::Height => height,
-                Side::Diameter => (width*width + height*height).sqrt(),
+                Side::Diameter => (width * width + height * height).sqrt(),
                 Side::Max => width.max(height),
                 Side::Min => width.min(height),
                 Side::Sum => width + height,
@@ -1052,18 +1179,29 @@ mod styles_proposition {
     }
 
     #[derive(Debug, Clone, Copy)]
-    pub(crate) struct Container {
+    pub struct Container {
         pub position: Point,
         pub size: Point,
         pub rotation: f32,
-        pub image: Option<Rectangle>
+        pub image: Option<Rectangle>,
+    }
+
+    impl From<ElementTransform> for Container {
+        fn from(transform: ElementTransform) -> Self {
+            Self {
+                position: transform.position,
+                size: transform.scale,
+                rotation: transform.rotation,
+                image: None,
+            }
+        }
     }
 
     #[derive(Debug, Clone, Copy)]
-    pub(crate) struct ViewPort(f32, f32);
+    pub struct ViewPort(pub f32, pub f32);
 
     #[derive(Debug, Clone, Copy)]
-    pub(crate) struct Rectangle {
+    pub struct Rectangle {
         pub position: Point,
         pub size: Point,
     }

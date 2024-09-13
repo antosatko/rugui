@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use examples_common::Drawing;
-use rugui::{styles::{Color, Side, Size}, Element, Gui};
+use rugui::{styles::{styles_proposition::{Colors, RValue, Side, Value, Values}, Color, Size}, Element, Gui};
 use winit::application::ApplicationHandler;
 
 extern crate examples_common;
@@ -48,11 +48,13 @@ impl ApplicationHandler for App {
 
         let mut element = Element::new().with_label("hello element");
         let styles = &mut element.styles;
-        styles.transfomr_mut().max_width = Size::Percent(50.0);
-        styles.transfomr_mut().max_height = Size::Percent(80.0);
-        styles.edges_mut().radius = (Size::Fill, Side::Min);
-        styles.edges_mut().smooth = (Size::Pixel(1.0), Side::Max);
-        *styles.bg_color_mut() = Color::CYAN;
+        //styles.transfomr_mut().max_width = Size::Percent(50.0);
+        //styles.transfomr_mut().max_height = Size::Percent(80.0);
+        //styles.edges_mut().radius = (Size::Fill, Side::Min);
+        //styles.edges_mut().smooth = (Size::Pixel(1.0), Side::Max);
+        *styles.bg_color.get_mut() = Colors::CYAN;
+        *styles.width.get_mut() = Values::Value(Value::Container(RValue::Full, Side::Min));
+        *styles.height.get_mut() = Values::Value(Value::Container(RValue::Full, Side::Min));
         let element_key = gui.add_element(element);
         gui.set_entry(Some(element_key));
 

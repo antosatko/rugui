@@ -11,7 +11,7 @@ use cosmic_text::{Attrs, FontSystem, Metrics, SwashCache};
 use events::{ElementEvent, EventPoll, EventTypes, WindowEvent};
 use image::{DynamicImage, GenericImage};
 use render::{GpuBound, RenderElement, RenderLinearGradient, RenderRadialGradient};
-use styles::{Side, Size, StyleSheet};
+use styles::{styles_proposition::{Container, ViewPort}, Side, Size, StyleSheet};
 
 pub mod events;
 mod render;
@@ -497,9 +497,9 @@ where
         } else {
             return;
         };
-        if let Some(entry) = self.elements.get_mut(&entry_key) {
+        /*if let Some(entry) = self.elements.get_mut(&entry_key) {
             entry.styles.flags.recalc_transform = true;
-        }
+        }*/
         self.element_transform(
             *entry_key,
             &ElementTransform {
@@ -608,69 +608,65 @@ where
     }
 
     fn element_transform(&mut self, key: ElementKey, transform: &ElementTransform) {
+        let (container, view_port) = (
+            transform.clone().into(),
+            ViewPort(self.size.0 as f32, self.size.1 as f32),
+        );
         let element = match self.elements.get_mut(&key) {
             Some(element) => element,
             None => return,
         };
-        if element.styles.flags.recalc_transform {
+        /*if element.styles.flags.recalc_transform {
             element.styles.flags.dirty_edges = true;
             self.traverse_elements_mut(key, &mut |e| {
                 e.styles.flags.recalc_transform = true;
             });
-        }
+        }*/
         let element = match self.elements.get_mut(&key) {
             Some(element) => element,
             None => return,
         };
-        if element.styles.flags.recalc_transform {
+        if true {
             let (width, height) = (
                 element
                     .styles
-                    .get_width(transform.scale.x, self.size.0 as f32),
+                    .width.get().calc(&container, &view_port),
                 element
                     .styles
-                    .get_height(transform.scale.y, self.size.1 as f32),
+                    .height.get().calc(&container, &view_port),
             );
-            let (x, y) = (
+            let pos = 
                 element
                     .styles
-                    .get_x(transform.position.x, transform.scale.x, width),
-                element
-                    .styles
-                    .get_y(transform.position.y, transform.scale.y, height),
-            );
-            let rotation = match element.styles.transform.rotation {
-                styles::Rotation::None => transform.rotation,
-                styles::Rotation::AbsNone => 0.0,
-                styles::Rotation::Deg(deg) => deg.to_radians() + transform.rotation,
-                styles::Rotation::Rad(rad) => rad + transform.rotation,
-                styles::Rotation::Percent(percent) => {
-                    (percent / 50.0) * std::f32::consts::PI + transform.rotation
-                }
-                styles::Rotation::AbsDeg(deg) => deg.to_radians(),
-                styles::Rotation::AbsRad(rad) => rad,
-                styles::Rotation::AbsPercent(percent) => (percent / 50.0) * std::f32::consts::PI,
-            };
+                    .position
+                    .get()
+                    .calc(&container, &view_port)
+            ;
+            let rotation = element
+                .styles
+                .rotation
+                .get()
+                .calc(&container, &view_port);
             let mut transform = ElementTransform {
-                position: Point::new(x, y),
+                position: pos,
                 scale: Point::new(width, height),
                 rotation,
                 edges_radius: 0.0,
                 edges_smooth: 0.0,
                 font_size: 0.0,
             };
-            let edges_radius = transform.calc_side(&element.styles.background.edges.radius, &self.size);
+            /*let edges_radius = transform.calc_side(&element.styles.background.edges.radius, &self.size);
             let edges_smooth = transform.calc_side(&element.styles.background.edges.smooth, &self.size);
             transform.edges_radius = edges_radius;
             transform.edges_smooth = edges_smooth;
             let font_size = transform.calc_side(&element.styles.text.size, &self.size);
-            transform.font_size = font_size;
+            transform.font_size = font_size;*/
             let pre_collision = element.transform.point_collision(self.input.mouse);
 
             element.transform = transform;
-            element.styles.flags.dirty_transform = true;
+            /*element.styles.flags.dirty_transform = true;
             element.styles.flags.dirty_edges = true;
-            element.styles.flags.recalc_transform = false;
+            element.styles.flags.recalc_transform = false;*/
 
             let post_collision = element.transform.point_collision(self.input.mouse);
             match (pre_collision, post_collision) {
@@ -722,24 +718,11 @@ where
         let transform = &element.transform;
         match element.children.to_owned() {
             Children::Element(child) => {
-                let (pad_width, pad_height) = match &element.styles.transform.padding {
-                    Size::Fill => (element.transform.scale.x, element.transform.scale.y),
-                    Size::Pixel(pad) => (*pad, *pad),
-                    Size::Percent(pad) => (
-                        element.transform.scale.x * (pad / 100.),
-                        element.transform.scale.y * (pad / 100.),
-                    ),
-                    Size::None => (0.0, 0.0),
-                    Size::AbsFill => (self.size.0 as f32, self.size.1 as f32),
-                    Size::AbsPercent(pad) => (
-                        self.size.0 as f32 * (pad / 100.),
-                        self.size.1 as f32 * (pad / 100.),
-                    ),
-                };
+                let padding = element.styles.padding.get().calc(&container, &view_port);
                 let transform = ElementTransform {
                     scale: Point::new(
-                        transform.scale.x - pad_width,
-                        transform.scale.y - pad_height,
+                        transform.scale.x - padding,
+                        transform.scale.y - padding,
                     ),
                     ..transform.clone()
                 };
@@ -747,24 +730,11 @@ where
                 return;
             }
             Children::Layers(children) => {
-                let (pad_width, pad_height) = match &element.styles.transform.padding {
-                    Size::Fill => (element.transform.scale.x, element.transform.scale.y),
-                    Size::Pixel(pad) => (*pad, *pad),
-                    Size::Percent(pad) => (
-                        element.transform.scale.x * (pad / 100.),
-                        element.transform.scale.y * (pad / 100.),
-                    ),
-                    Size::None => (0.0, 0.0),
-                    Size::AbsFill => (self.size.0 as f32, self.size.1 as f32),
-                    Size::AbsPercent(pad) => (
-                        self.size.0 as f32 * (pad / 100.),
-                        self.size.1 as f32 * (pad / 100.),
-                    ),
-                };
+                let padding = element.styles.padding.get().calc(&container, &view_port);
                 let transform = ElementTransform {
                     scale: Point::new(
-                        transform.scale.x - pad_width,
-                        transform.scale.y - pad_height,
+                        transform.scale.x - padding,
+                        transform.scale.y - padding,
                     ),
                     ..transform.clone()
                 };
@@ -997,7 +967,7 @@ where
     text: Option<(String, bool)>,
     pub label: Option<String>,
     pub render_element: Option<RenderElement>,
-    pub styles: StyleSheet,
+    pub styles: styles::styles_proposition::Styles,
     pub events: EventListeners<Msg>,
     pub children: Children,
     text_buffer: Option<cosmic_text::Buffer>,
@@ -1105,7 +1075,7 @@ where
             text: None,
             label: None,
             render_element: None,
-            styles: StyleSheet::default(),
+            styles: styles::styles_proposition::Styles::default(),
             events: EventListeners::new(),
             children: Children::None,
             text_buffer: None,
@@ -1121,7 +1091,7 @@ where
     }
 
     /// Configures styles for `Element`
-    pub fn with_styles(mut self, styles: StyleSheet) -> Self {
+    pub fn with_styles(mut self, styles: styles::styles_proposition::Styles) -> Self {
         self.styles = styles;
         self
     }
@@ -1143,20 +1113,20 @@ where
             self.render_element = Some(RenderElement::zeroed(device))
         }
         let mut render_element = self.render_element.take().unwrap();
-        render_element.data.color = self.styles.background.color;
-        if self.styles.flags.dirty_texture {
+        render_element.data.color = self.styles.bg_color.get().to_rgba().into();
+        /*if self.styles.flags.dirty_texture {
             if let Some(texture) = &self.styles.background.texture {
                 render_element.set_texture(texture.clone());
             }
 
             self.styles.flags.dirty_texture = false;
-        }
-        if self.styles.flags.dirty_color {
-            let color = self.styles.background.color;
+        }*/
+        if self.styles.bg_color.dirty {
+            let color = self.styles.bg_color.get().to_rgba().into();
             render_element.set_color(color, queue, device);
-            self.styles.flags.dirty_color = false;
+            self.styles.bg_color.dirty = false;
         }
-        if self.styles.flags.dirty_edges {
+        /*if self.styles.flags.dirty_edges {
             let radius = self.transform.edges_radius;
             let smooth = self.transform.edges_smooth;
             render_element.data.edges = [
@@ -1169,21 +1139,21 @@ where
                 bytemuck::cast_slice(&render_element.data.edges),
             );
             self.styles.flags.dirty_edges = false;
-        }
-        if self.styles.flags.dirty_alpha {
-            let alpha = self.styles.alpha;
+        }*/
+        if self.styles.alpha.dirty {
+            let alpha = *self.styles.alpha.get();
             render_element.data.alpha = alpha;
-            self.styles.flags.dirty_alpha = false;
+            self.styles.alpha.dirty = false;
         }
-        if self.styles.flags.dirty_transform {
+        //if self.styles.flags.dirty_transform {
             let transform = &self.transform;
             render_element.data.update_transform(transform);
             if let Some((_, flag)) = &mut self.text {
                 *flag = true;
             }
-            self.styles.flags.dirty_transform = false;
-        }
-        if self.styles.flags.dirty_lin_gradient {
+            //self.styles.flags.dirty_transform = false;
+        //}
+        /*if self.styles.flags.dirty_lin_gradient {
             if let Some(grad) = &self.styles.background.lin_gradient {
                 match &mut render_element.linear_gradient {
                     Some(lin) => {
@@ -1199,8 +1169,8 @@ where
                 }
             }
             self.styles.flags.dirty_lin_gradient = false;
-        }
-        if self.styles.flags.dirty_rad_gradient {
+        }*/
+        /*if self.styles.flags.dirty_rad_gradient {
             if let Some(grad) = &self.styles.background.rad_gradient {
                 match &mut render_element.radial_gradient {
                     Some(rad) => {
@@ -1216,8 +1186,8 @@ where
                 }
             }
             self.styles.flags.dirty_rad_gradient = false;
-        }
-        match &mut self.text {
+        }*/
+        /*match &mut self.text {
             Some((txt, dirty)) => {
                 if *dirty {
                     match &mut self.text_buffer {
@@ -1298,7 +1268,7 @@ where
                 }
             }
             None => render_element.text = None
-        }
+        }*/
 
         render_element.write_all(queue);
         self.render_element = Some(render_element)
