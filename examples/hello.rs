@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use examples_common::Drawing;
-use rugui::{styles::{styles_proposition::{Colors, RValue, Side, Value, Values}, Color, Size}, Element, Gui};
-use winit::application::ApplicationHandler;
+use rugui::{load_texture_from_memory, styles::{styles_proposition::{Colors, RValue, Side, Value, Values}, Color}, Element, ElementKey, Gui};
+use winit::{application::ApplicationHandler, window::Window};
 
 extern crate examples_common;
 extern crate pollster;
@@ -26,6 +26,9 @@ pub enum App {
 pub struct Application {
     gui: Gui<()>,
     drawing: Drawing,
+    element: ElementKey,
+    t: f32,
+    window: Arc<Window>
 }
 
 impl ApplicationHandler for App {
@@ -40,27 +43,34 @@ impl ApplicationHandler for App {
                 .unwrap(),
         );
 
+        
         let drawing = pollster::block_on(Drawing::new(window.clone()));
         window.set_visible(true);
 
+        let texture = load_texture_from_memory(&drawing.device, &drawing.queue, include_bytes!("they.webp"));
+        
         let size = window.inner_size();
         let mut gui = Gui::new(size.into(), &drawing.device, &drawing.queue);
 
         let mut element = Element::new().with_label("hello element");
         let styles = &mut element.styles;
-        //styles.transfomr_mut().max_width = Size::Percent(50.0);
-        //styles.transfomr_mut().max_height = Size::Percent(80.0);
-        //styles.edges_mut().radius = (Size::Fill, Side::Min);
-        //styles.edges_mut().smooth = (Size::Pixel(1.0), Side::Max);
-        *styles.bg_color.get_mut() = Colors::CYAN;
-        *styles.width.get_mut() = Values::Value(Value::Container(RValue::Full, Side::Min));
-        *styles.height.get_mut() = Values::Value(Value::Container(RValue::Full, Side::Min));
+        styles.bg_color.set(Colors::CYAN.with_alpha(0.5));
+        styles.width.set(Values::Value(Value::Container(RValue::Full, Side::Min)));
+        styles.height.set(Values::Value(Value::Container(RValue::Full, Side::Min)));
+        styles.edges_radius.set(Values::Value(Value::Pixel(10.0)));
+        styles.edges_smooth.set(Values::Value(Value::Pixel(1.0)));
+        styles.texture.set(Some(Arc::new(texture)));
+
+        element.text_str("Hello world!");
         let element_key = gui.add_element(element);
         gui.set_entry(Some(element_key));
 
         *self = App::App(Application {
             gui,
             drawing,
+            element: element_key,
+            t: 0.0,
+            window,
         });
     }
 
@@ -86,9 +96,13 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
+                this.t += 2.0;
+                let element = this.gui.get_element_mut(this.element).unwrap();
+                element.styles.text_color.set(Colors::Hsl(this.t, 1.0, 0.5));
                 this.gui.update();
                 this.gui.prepare(&this.drawing.device, &this.drawing.queue);
                 this.drawing.draw(&mut this.gui);
+                this.window.request_redraw();
             }
             _ => {}
         }

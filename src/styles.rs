@@ -1,6 +1,6 @@
-//! `Element` styles
+/*//! `Element` styles
 
-use std::{default, sync::Arc};
+use std::sync::Arc;
 
 use crate::Point;
 use bytemuck::Zeroable;
@@ -618,7 +618,7 @@ pub struct LinearGradient {
 pub struct RadialGradient {
     pub center: ColorPoint,
     pub radius: ColorPoint,
-}
+} */
 
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C)]
@@ -765,7 +765,9 @@ impl From<Color> for [f32; 4] {
 }
 
 pub mod styles_proposition {
-    use crate::{rotate_point, ElementTransform, Point};
+    use std::sync::Arc;
+
+    use crate::{rotate_point, texture::Texture, ElementTransform, Point};
 
     pub struct StyleComponent<S> {
         pub(crate) style: S,
@@ -790,6 +792,11 @@ pub mod styles_proposition {
         pub margin: StyleComponent<Values>,
         pub padding: StyleComponent<Values>,
         pub alpha: StyleComponent<f32>,
+        pub text_color: StyleComponent<Colors>,
+        pub text_size: StyleComponent<Values>,
+        pub texture: StyleComponent<Option<Arc<Texture>>>,
+        pub edges_radius: StyleComponent<Values>,
+        pub edges_smooth: StyleComponent<Values>,
         pub visible: bool,
         pub selectable: bool,
         pub z_index: i32,
@@ -799,12 +806,23 @@ pub mod styles_proposition {
         fn default() -> Self {
             Self {
                 position: Position::new_c(),
-                width: StyleComponent::new(Values::Value(Value::Container(RValue::Full, Side::Width))),
-                height: StyleComponent::new(Values::Value(Value::Container(RValue::Full, Side::Height))),
+                width: StyleComponent::new(Values::Value(Value::Container(
+                    RValue::Full,
+                    Side::Width,
+                ))),
+                height: StyleComponent::new(Values::Value(Value::Container(
+                    RValue::Full,
+                    Side::Height,
+                ))),
                 rotation: StyleComponent::new(Rotation::None),
                 bg_color: StyleComponent::new(Colors::Rgba(0.0, 0.0, 0.0, 0.0)),
                 margin: StyleComponent::new(Values::Value(Value::Zero)),
                 padding: StyleComponent::new(Values::Value(Value::Zero)),
+                text_color: StyleComponent::new(Colors::BLACK),
+                text_size: StyleComponent::new(Values::Value(Value::Pixel(50.0))),
+                texture: StyleComponent::new(None),
+                edges_radius: StyleComponent::new(Values::Value(Value::Zero)),
+                edges_smooth: StyleComponent::new(Values::Value(Value::Zero)),
                 alpha: StyleComponent::new(1.0),
                 visible: true,
                 selectable: false,
@@ -871,12 +889,8 @@ pub mod styles_proposition {
             match self {
                 Colors::Rgb(r, g, b) => (*r, *g, *b, 1.0),
                 Colors::Rgba(r, g, b, a) => (*r, *g, *b, *a),
-                Colors::Hsl(h, s, l) => {
-                    Self::hsl_to_rgba(*h, *s, *l)
-                }
-                Colors::Cmyk(c, m, y, k) => {
-                    Self::cmyk_to_rgba(*c, *m, *y, *k)
-                }
+                Colors::Hsl(h, s, l) => Self::hsl_to_rgba(*h, *s, *l),
+                Colors::Cmyk(c, m, y, k) => Self::cmyk_to_rgba(*c, *m, *y, *k),
             }
         }
 
@@ -900,6 +914,21 @@ pub mod styles_proposition {
             let g = 1.0 - (m * (1.0 - k) + k);
             let b = 1.0 - (y * (1.0 - k) + k);
             (r, g, b, 1.0)
+        }
+
+        pub fn with_alpha(&self, a: f32) -> Self {
+            match *self {
+                Colors::Rgb(r, g, b) => Colors::Rgba(r, g, b, a),
+                Colors::Rgba(r, g, b, _) => Colors::Rgba(r, g, b, a),
+                Colors::Hsl(h, s, l) => {
+                    let (r, g, b, _) = Self::hsl_to_rgba(h, s, l);
+                    Colors::Rgba(r, g, b, a)
+                }
+                Colors::Cmyk(c, m, y, k) => {
+                    let (r, g, b, _) = Self::cmyk_to_rgba(c, m, y, k);
+                    Colors::Rgba(r, g, b, a)
+                }
+            }
         }
     }
 
@@ -928,6 +957,7 @@ pub mod styles_proposition {
     }
 
     /// Returns value
+    #[derive(Debug, Clone)]
     pub enum Values {
         /// Perform an operation
         Expr(Box<Expression>),
@@ -938,6 +968,7 @@ pub mod styles_proposition {
     }
 
     /// Performs an operation
+    #[derive(Debug, Clone)]
     pub struct Expression {
         /// Left side of operation
         left: Values,
@@ -948,12 +979,14 @@ pub mod styles_proposition {
     }
 
     /// A function
+    #[derive(Debug, Clone)]
     pub struct Function {
         value: Values,
         fun: Functions,
     }
 
     /// Choose measured unit
+    #[derive(Debug, Clone)]
     pub enum Value {
         /// This is the space that is given to the element
         Container(RValue, Side),
@@ -978,6 +1011,7 @@ pub mod styles_proposition {
     }
 
     /// Returns size of a specified side/equation of the measured unit
+    #[derive(Debug, Clone)]
     pub enum Side {
         /// Returns width of the measured unit
         Width,
@@ -999,6 +1033,7 @@ pub mod styles_proposition {
     }
 
     /// Performs operation on size
+    #[derive(Debug, Clone)]
     pub enum RValue {
         /// Returns a percentage of size `(size / 100) * Percent`
         Percent(f32),
@@ -1010,6 +1045,7 @@ pub mod styles_proposition {
         Full,
     }
 
+    #[derive(Debug, Clone)]
     pub enum Op {
         Add,
         Sub,
@@ -1021,6 +1057,7 @@ pub mod styles_proposition {
         Pow,
     }
 
+    #[derive(Debug, Clone)]
     pub enum Functions {
         Round,
         Floor,
@@ -1036,6 +1073,10 @@ pub mod styles_proposition {
         pub fn get_mut(&mut self) -> &mut S {
             self.dirty = true;
             &mut self.style
+        }
+        pub fn set(&mut self, style: S) {
+            self.dirty = true;
+            self.style = style;
         }
     }
 
@@ -1087,11 +1128,11 @@ pub mod styles_proposition {
     }
 
     impl Values {
-        pub fn calc(&self, contaner: &Container, view_port: &ViewPort) -> f32 {
+        pub fn calc(&self, container: &Container, view_port: &ViewPort) -> f32 {
             match self {
-                Values::Expr(expr) => expr.calc(contaner, view_port),
-                Values::Value(val) => val.calc(contaner, view_port),
-                Values::Function(fun) => fun.fun.calc(fun.value.calc(contaner, view_port)),
+                Values::Expr(expr) => expr.calc(container, view_port),
+                Values::Value(val) => val.calc(container, view_port),
+                Values::Function(fun) => fun.fun.calc(fun.value.calc(container, view_port)),
             }
         }
     }
@@ -1176,6 +1217,21 @@ pub mod styles_proposition {
                 Side::Midpoint => (width + height) / 2.0,
             }
         }
+    }
+
+    pub struct LinearGradient {
+        pub p1: ColorPoint,
+        pub p2: ColorPoint,
+    }
+
+    pub struct RadialGradient {
+        pub center: ColorPoint,
+        pub radius: ColorPoint,
+    }
+
+    pub struct ColorPoint {
+        pub position: Position,
+        pub color: Colors,
     }
 
     #[derive(Debug, Clone, Copy)]

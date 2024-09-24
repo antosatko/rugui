@@ -8,7 +8,7 @@ use wgpu::{
 };
 
 use crate::{
-    styles::{LinearGradient, RadialGradient},
+    styles::styles_proposition::{LinearGradient, RadialGradient},
     texture::Texture,
     ElementTransform,
 };
@@ -579,16 +579,16 @@ impl RenderRadialGradient {
     }
 
     pub(crate) fn from_style(&mut self, style: &RadialGradient, transform: &ElementTransform) {
-        self.center = style.center.position.normalized(transform.scale);
+        /*self.center = style.center.position.calc(container, view_port)
         self.center_color = style.center.color;
         self.radius = {
             let p1 = self.center;
-            let p2 = style.radius.position.normalized(transform.scale);
+            let p2 = style.radius.
             let a = p2[0] - p1[0];
             let b = p2[1] - p1[1];
             f32::sqrt(a * a + b * b)
         };
-        self.outer_color = style.radius.color;
+        self.outer_color = style.radius.color;*/
     }
 }
 
@@ -794,15 +794,14 @@ impl RenderLinearGradient {
     }
 
     pub(crate) fn from_style(&mut self, style: &LinearGradient, transform: &ElementTransform) {
-        self.start = style.p1.position.normalized(transform.scale);
+        /*self.start = style.p1.position.normalized(transform.scale);
         self.start_color = style.p1.color;
         self.end = style.p2.position.normalized(transform.scale);
-        self.end_color = style.p2.color;
+        self.end_color = style.p2.color;*/
     }
 }
 
 pub struct RenderElement {
-    pub data: RenderElementData,
     pub center_buffer: wgpu::Buffer,
     pub size_buffer: wgpu::Buffer,
     pub rotation_buffer: wgpu::Buffer,
@@ -873,7 +872,7 @@ impl RenderColor {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, Default)]
 pub struct RenderElementData {
     pub center: [f32; 2],
     pub size: [f32; 2],
@@ -1136,7 +1135,6 @@ impl RenderElement {
         });
 
         Self {
-            data: RenderElementData::ZEROED,
             center_buffer,
             size_buffer,
             rotation_buffer,
@@ -1173,26 +1171,25 @@ impl RenderElement {
     }
 
     pub fn update(&mut self, data: RenderElementData, queue: &wgpu::Queue) {
-        self.data = data;
-        self.write_all(queue);
+        self.write_all(queue, data);
     }
 
-    pub fn write_all(&self, queue: &wgpu::Queue) {
+    pub fn write_all(&self, queue: &wgpu::Queue, data: RenderElementData) {
         queue.write_buffer(
             &self.center_buffer,
             0,
-            bytemuck::cast_slice(&self.data.center),
+            bytemuck::cast_slice(&data.center),
         );
-        queue.write_buffer(&self.size_buffer, 0, bytemuck::cast_slice(&self.data.size));
+        queue.write_buffer(&self.size_buffer, 0, bytemuck::cast_slice(&data.size));
         queue.write_buffer(
             &self.rotation_buffer,
             0,
-            bytemuck::cast_slice(&[self.data.rotation]),
+            bytemuck::cast_slice(&[data.rotation]),
         );
         queue.write_buffer(
             &self.alpha_buffer,
             0,
-            bytemuck::cast_slice(&[self.data.alpha]),
+            bytemuck::cast_slice(&[data.alpha]),
         );
     }
 

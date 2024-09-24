@@ -5,6 +5,7 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) v_tex_coords: vec2<f32>,
+    @location(1) clip_position: vec2<f32>,
 }
 
 @group(0)@binding(0) var<uniform> screen_size: vec2<f32>;
@@ -13,6 +14,7 @@ struct VertexOutput {
 @group(1)@binding(1) var<uniform> size: vec2<f32>;
 @group(1)@binding(2) var<uniform> rotation: f32;
 @group(1)@binding(3) var<uniform> alpha: f32;
+@group(1)@binding(4) var<uniform> edges: vec2<f32>;
 
 @group(2)@binding(0) var t_diffuse: texture_2d<f32>;
 @group(2)@binding(1) var t_sampler: sampler;
@@ -24,6 +26,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     // Calculate vertex position
     var position = vertex_position(in.index);
     out.v_tex_coords = position + 0.5;
+    out.clip_position = size * position*2.0;
 
     // Scale and rotate the position
     var scale = vec2(size.x * position.x, size.y * position.y);
@@ -49,7 +52,18 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0)vec4<f32> {
     var color =  textureSample(t_diffuse, t_sampler, in.v_tex_coords);
-    return vec4<f32>(color.rgb, color.a*alpha);
+    var p = abs(in.clip_position);
+    var edge_size = edges.x * 2.0;
+    var s = size - edge_size;
+    if p.x < s.x || p.y < s.y {
+        return vec4<f32>(color.rgb, color.a*alpha);
+    }
+    var dist = distance(p, s);
+    if dist < edge_size {
+        return vec4<f32>(color.rgb, color.a*alpha);
+    }
+    var glow = 1.0 - ((dist - edge_size) / edges.y);
+    return vec4<f32>(color.rgb, color.a*alpha*glow);
 }
 
 

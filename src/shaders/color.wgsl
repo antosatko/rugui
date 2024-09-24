@@ -52,15 +52,16 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0)vec4<f32> {
     var p = abs(in.clip_position);
-    var s = size - edges.x;
+    var edge_size = edges.x * 2.0;
+    var s = size - edge_size;
     if p.x < s.x || p.y < s.y {
         return vec4<f32>(color.rgb, color.a*alpha);
     }
     var dist = distance(p, s);
-    if dist < edges.x {
+    if dist < edge_size {
         return vec4<f32>(color.rgb, color.a*alpha);
     }
-    var glow = 1.0 - ((dist - edges.x) / edges.y);
+    var glow = 1.0 - ((dist - edge_size) / edges.y);
     return vec4<f32>(color.rgb, color.a*alpha*glow);
 }
 

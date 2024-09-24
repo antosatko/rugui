@@ -7,11 +7,11 @@ use std::{collections::HashMap, sync::Arc};
 
 #[cfg(feature = "clipboard")]
 use clipboard::{ClipboardContext, ClipboardProvider};
-use cosmic_text::{Attrs, FontSystem, Metrics, SwashCache};
 use events::{ElementEvent, EventPoll, EventTypes, WindowEvent};
+use cosmic_text::{Attrs, FontSystem, Metrics, SwashCache};
 use image::{DynamicImage, GenericImage};
-use render::{GpuBound, RenderElement, RenderLinearGradient, RenderRadialGradient};
-use styles::{styles_proposition::{Container, ViewPort}, Side, Size, StyleSheet};
+use render::{GpuBound, RenderElement, RenderElementData, RenderLinearGradient, RenderRadialGradient};
+use styles::styles_proposition::{Container, Side, Styles, Values, ViewPort};
 
 pub mod events;
 mod render;
@@ -140,9 +140,6 @@ where
                 position: Point::new(self.size.0 as f32 / 2.0, self.size.1 as f32 / 2.0),
                 scale: Point::new(self.size.0 as f32, self.size.1 as f32),
                 rotation: 0.0,
-                edges_radius: 0.0,
-                edges_smooth: 0.0,
-                font_size: 0.0,
             };
             self.element_transform(key, &transform);
         }
@@ -506,9 +503,6 @@ where
                 position: Point::new(size.0 as f32 / 2.0, size.1 as f32 / 2.0),
                 scale: Point::new(size.0 as f32, size.1 as f32),
                 rotation: 0.0,
-                edges_radius: 0.0,
-                edges_smooth: 0.0,
-                font_size: 0.0,
             },
         );
     }
@@ -537,9 +531,6 @@ where
                 position: Point::new(self.size.0 as f32 / 2.0, self.size.1 as f32 / 2.0),
                 scale: Point::new(self.size.0 as f32, self.size.1 as f32),
                 rotation: 0.0,
-                edges_radius: 0.0,
-                edges_smooth: 0.0,
-                font_size: 0.0,
             },
         );
     }
@@ -616,12 +607,6 @@ where
             Some(element) => element,
             None => return,
         };
-        /*if element.styles.flags.recalc_transform {
-            element.styles.flags.dirty_edges = true;
-            self.traverse_elements_mut(key, &mut |e| {
-                e.styles.flags.recalc_transform = true;
-            });
-        }*/
         let element = match self.elements.get_mut(&key) {
             Some(element) => element,
             None => return,
@@ -647,20 +632,18 @@ where
                 .rotation
                 .get()
                 .calc(&container, &view_port);
-            let mut transform = ElementTransform {
+            let transform = ElementTransform {
                 position: pos,
                 scale: Point::new(width, height),
                 rotation,
-                edges_radius: 0.0,
-                edges_smooth: 0.0,
-                font_size: 0.0,
             };
-            /*let edges_radius = transform.calc_side(&element.styles.background.edges.radius, &self.size);
-            let edges_smooth = transform.calc_side(&element.styles.background.edges.smooth, &self.size);
-            transform.edges_radius = edges_radius;
-            transform.edges_smooth = edges_smooth;
-            let font_size = transform.calc_side(&element.styles.text.size, &self.size);
-            transform.font_size = font_size;*/
+            let edges_radius = element.styles.edges_radius.get().calc(&container, &view_port);
+            element.render_element.1.edges[0] = edges_radius;
+            let edges_smooth = element.styles.edges_smooth.get().calc(&container, &view_port);
+            element.render_element.1.edges[1] = edges_smooth;
+
+            let font_size = element.styles.text_size.get().calc(&container, &view_port);
+            element.render_element.1.text_size = font_size;
             let pre_collision = element.transform.point_collision(self.input.mouse);
 
             element.transform = transform;
@@ -758,14 +741,7 @@ where
                     if remaining_height <= 0.0 {
                         break;
                     }
-                    let space = match spacing {
-                        Size::Pixel(space) => space,
-                        Size::Percent(space) => transform.scale.y * (space / 100.),
-                        Size::Fill => remaining_height,
-                        Size::None => remaining_height / len,
-                        Size::AbsFill => self.size.1 as f32,
-                        Size::AbsPercent(space) => self.size.1 as f32 * (space / 100.),
-                    };
+                    let space = spacing.calc(&container, &view_port);
                     let position = if transform.rotation == 0.0 {
                         Point::new(transform.position.x, y + space / 2.0)
                     } else {
@@ -777,9 +753,6 @@ where
                         position,
                         scale: Point::new(transform.scale.x, space),
                         rotation: transform.rotation,
-                        edges_radius: 0.0,
-                        edges_smooth: 0.0,
-                        font_size: 0.0,
                     };
                     y += space;
                     remaining_height -= space;
@@ -803,14 +776,7 @@ where
                     if remaining_width <= 0.0 {
                         break;
                     }
-                    let space = match spacing {
-                        Size::Pixel(space) => space,
-                        Size::Percent(space) => transform.scale.x * (space / 100.),
-                        Size::Fill => remaining_width,
-                        Size::None => remaining_width / len,
-                        Size::AbsFill => self.size.0 as f32,
-                        Size::AbsPercent(space) => self.size.0 as f32 * (space / 100.),
-                    };
+                    let space = spacing.calc(&container, &view_port);
                     let position = if transform.rotation == 0.0 {
                         Point::new(x + space / 2.0, transform.position.y)
                     } else {
@@ -822,9 +788,6 @@ where
                         position,
                         scale: Point::new(space, transform.scale.y),
                         rotation: transform.rotation,
-                        edges_radius: 0.0,
-                        edges_smooth: 0.0,
-                        font_size: 0.0,
                     };
                     self.element_transform(element, &transform);
                     x += space;
@@ -840,25 +803,16 @@ where
         self.size
     }
 
-    pub fn render<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>/*, queue: &wgpu::Queue*/) {
+    pub fn render<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) {
         pass.set_bind_group(0, &self.gpu.dimensions_bind_group, &[]);
 
-        let mut data = Vec::new();
-        //self.render_element(*entry_key, pass);
         for e in self.ordered.iter().cloned() {
             if let Some(e) = self.get_element(e) {
-                if let Some(re) = &e.render_element {
-                    data.push(re.data);
+                if let Some(re) = &e.render_element.0 {
                     re.render(&self.gpu.pipelines, pass)
                 }
             }
         }
-
-        /*queue.write_buffer(&self.gpu.instances, 0, bytemuck::cast_slice(&data));
-        pass.set_pipeline(&self.gpu.pipelines.instancing_pipeline);
-        pass.set_vertex_buffer(0, self.gpu.instances.slice(..));
-        println!("data: {data:?}");
-        pass.draw(0..6, 0..data.len() as _)*/
     }
 }
 
@@ -875,9 +829,6 @@ pub(crate) struct ElementTransform {
     pub scale: Point,
     /// Rotation in radians
     pub rotation: f32,
-    pub edges_radius: f32,
-    pub edges_smooth: f32,
-    pub font_size: f32,
 }
 
 impl ElementTransform {
@@ -886,9 +837,6 @@ impl ElementTransform {
             position: Point::new(0.0, 0.0),
             scale: Point::new(0.0, 0.0),
             rotation: 0.0,
-            edges_radius: 0.0,
-            edges_smooth: 0.0,
-            font_size: 20.0,
         }
     }
 
@@ -907,54 +855,8 @@ impl ElementTransform {
             && point_rotated.y <= y_max
     }
 
-    pub fn calc_side(&self, (size, side): &(Size, Side), view_port: &(u32, u32)) -> f32 {
-        let view_port = (view_port.0 as f32, view_port.1 as f32);
-        match side {
-            Side::Width => {
-                let a = self.scale.x;
-                match size {
-                    Size::None => 0.0,
-                    Size::Fill => a,
-                    Size::Pixel(p) => *p,
-                    Size::Percent(p) => a * (*p / 100.),
-                    Size::AbsFill => view_port.0,
-                    Size::AbsPercent(p) => view_port.0 * (*p / 100.),
-                }
-            }
-            Side::Height => {
-                let a = self.scale.y;
-                match size {
-                    Size::None => 0.0,
-                    Size::Fill => a,
-                    Size::Pixel(p) => *p,
-                    Size::Percent(p) => a * (*p / 100.),
-                    Size::AbsFill => view_port.1,
-                    Size::AbsPercent(p) => view_port.1 * (*p / 100.),
-                }
-            }
-            Side::Max => {
-                let a = self.scale.y.max(self.scale.x);
-                match size {
-                    Size::None => 0.0,
-                    Size::Fill => a,
-                    Size::Pixel(p) => *p,
-                    Size::Percent(p) => a * (*p / 100.),
-                    Size::AbsFill => view_port.0.max(view_port.1),
-                    Size::AbsPercent(p) => view_port.0.max(view_port.1) * (*p / 100.),
-                }
-            }
-            Side::Min => {
-                let a = self.scale.y.min(self.scale.x);
-                match size {
-                    Size::None => 0.0,
-                    Size::Fill => a,
-                    Size::Pixel(p) => *p,
-                    Size::Percent(p) => a * (*p / 100.),
-                    Size::AbsFill => view_port.0.min(view_port.1),
-                    Size::AbsPercent(p) => view_port.0.min(view_port.1) * (*p / 100.),
-                }
-            }
-        }
+    pub fn calc_side(&self, (size, side): &(Values, Side), view_port: &(u32, u32)) -> f32 {
+        todo!()
     }
 }
 
@@ -966,7 +868,7 @@ where
 {
     text: Option<(String, bool)>,
     pub label: Option<String>,
-    pub render_element: Option<RenderElement>,
+    pub render_element: (Option<RenderElement>, RenderElementData),
     pub styles: styles::styles_proposition::Styles,
     pub events: EventListeners<Msg>,
     pub children: Children,
@@ -1074,7 +976,7 @@ where
         Self {
             text: None,
             label: None,
-            render_element: None,
+            render_element: (None, RenderElementData::default()),
             styles: styles::styles_proposition::Styles::default(),
             events: EventListeners::new(),
             children: Children::None,
@@ -1109,27 +1011,27 @@ where
         font_system: &mut FontSystem,
         swash_cache: &mut SwashCache,
     ) {
-        if let None = self.render_element {
-            self.render_element = Some(RenderElement::zeroed(device))
+        if let None = &self.render_element.0 {
+            self.render_element.0 = Some(RenderElement::zeroed(device))
         }
-        let mut render_element = self.render_element.take().unwrap();
-        render_element.data.color = self.styles.bg_color.get().to_rgba().into();
-        /*if self.styles.flags.dirty_texture {
-            if let Some(texture) = &self.styles.background.texture {
+        let mut render_element = self.render_element.0.take().unwrap();
+        self.render_element.1.color = self.styles.bg_color.get().to_rgba().into();
+        if self.styles.texture.dirty {
+            if let Some(texture) = &self.styles.texture.get() {
                 render_element.set_texture(texture.clone());
             }
 
-            self.styles.flags.dirty_texture = false;
-        }*/
+            self.styles.texture.dirty = false;
+        }
         if self.styles.bg_color.dirty {
             let color = self.styles.bg_color.get().to_rgba().into();
             render_element.set_color(color, queue, device);
             self.styles.bg_color.dirty = false;
         }
-        /*if self.styles.flags.dirty_edges {
-            let radius = self.transform.edges_radius;
+        if self.styles.edges_radius.dirty || self.styles.edges_smooth.dirty {
+            /*let radius = self.transform.edges_radius;
             let smooth = self.transform.edges_smooth;
-            render_element.data.edges = [
+            self.render_element.1.edges = [
                 radius,
                 smooth,
             ];
@@ -1138,16 +1040,25 @@ where
                 0,
                 bytemuck::cast_slice(&render_element.data.edges),
             );
-            self.styles.flags.dirty_edges = false;
-        }*/
+            self.styles.flags.dirty_edges = false;*/
+            queue.write_buffer(
+                &render_element.edges_buffer,
+                0,
+                bytemuck::cast_slice(&[
+                    self.render_element.1.edges[0],
+                    self.render_element.1.edges[1],
+                ]),
+            );
+
+        }
         if self.styles.alpha.dirty {
             let alpha = *self.styles.alpha.get();
-            render_element.data.alpha = alpha;
+            self.render_element.1.alpha = alpha;
             self.styles.alpha.dirty = false;
         }
         //if self.styles.flags.dirty_transform {
             let transform = &self.transform;
-            render_element.data.update_transform(transform);
+            self.render_element.1.update_transform(transform);
             if let Some((_, flag)) = &mut self.text {
                 *flag = true;
             }
@@ -1187,31 +1098,26 @@ where
             }
             self.styles.flags.dirty_rad_gradient = false;
         }*/
-        /*match &mut self.text {
+        match &mut self.text {
             Some((txt, dirty)) => {
                 if *dirty {
                     match &mut self.text_buffer {
                         Some(tb) => {
                             let mut tb = tb.borrow_with(font_system);
                             tb.set_metrics(Metrics::new(
-                                self.transform.font_size,
-                                self.transform.font_size+3.0,
+                                self.render_element.1.text_size,
+                                self.render_element.1.text_size+3.0,
                             ));
                             tb.set_size(Some(self.transform.scale.x), Some(self.transform.scale.y));
                             let attrs = Attrs::new();
                             tb.set_text(&txt, attrs, cosmic_text::Shaping::Advanced);
-                            let color = self.styles.text.color;
-                            let color = cosmic_text::Color::rgb(
-                                (color.r * 255.0) as u8,
-                                (color.g * 255.0) as u8,
-                                (color.b * 255.0) as u8,
-                            );
+                            let color = self.styles.text_color.get().to_rgba();
                             let mut image = DynamicImage::new(
                                 self.transform.scale.x as u32,
                                 self.transform.scale.y as u32,
                                 image::ColorType::Rgba8,
                             );
-                            tb.draw(swash_cache, color, |x, y, _, _, color| {
+                            tb.draw(swash_cache, cosmic_text::Color::rgba((color.0 * 255.0) as u8, (color.1 * 255.0) as u8, (color.2 * 255.0) as u8, (color.3 * 255.0) as u8), |x, y, _, _, color| {
                                 if x < 0
                                     || y < 0
                                     || x >= self.transform.scale.x as i32
@@ -1229,8 +1135,8 @@ where
                             let mut tb = cosmic_text::Buffer::new(
                                 font_system,
                                 Metrics::new(
-                                    self.transform.font_size,
-                                    self.transform.font_size+3.0,
+                                    self.render_element.1.text_size,
+                                    self.render_element.1.text_size+3.0,
                                 ),
                             );
                             let mut tb = tb.borrow_with(font_system);
@@ -1238,18 +1144,13 @@ where
                             let attrs = Attrs::new();
                             tb.set_text(&txt, attrs, cosmic_text::Shaping::Advanced);
                             tb.shape_until_scroll(true);
-                            let color = self.styles.text.color;
-                            let color = cosmic_text::Color::rgb(
-                                (color.r * 255.0) as u8,
-                                (color.g * 255.0) as u8,
-                                (color.b * 255.0) as u8,
-                            );
+                            let color = self.styles.text_color.get().to_rgba();
                             let mut image = DynamicImage::new(
                                 self.transform.scale.x as u32,
                                 self.transform.scale.y as u32,
                                 image::ColorType::Rgba8,
                             );
-                            tb.draw(swash_cache, color, |x, y, _, _, color| {
+                            tb.draw(swash_cache, cosmic_text::Color::rgba((color.0 * 255.0) as u8, (color.1 * 255.0) as u8, (color.2 * 255.0) as u8, (color.3 * 255.0) as u8), |x, y, _, _, color| {
                                 if x < 0
                                     || y < 0
                                     || x >= self.transform.scale.x as i32
@@ -1268,10 +1169,10 @@ where
                 }
             }
             None => render_element.text = None
-        }*/
+        }
 
-        render_element.write_all(queue);
-        self.render_element = Some(render_element)
+        render_element.write_all(queue, self.render_element.1);
+        self.render_element.0 = Some(render_element)
     }
 
     /// Returns text rendered inside the `Element`
@@ -1334,12 +1235,12 @@ pub enum Children {
     /// Positions child `Elements` in rows on top of the parent
     Rows {
         children: Vec<Section>,
-        spacing: Size,
+        spacing: Values,
     },
     /// Positions child `Elements` in columns on top of the parent
     Columns {
         children: Vec<Section>,
-        spacing: Size,
+        spacing: Values,
     },
 
     /// Element has no children
@@ -1353,7 +1254,7 @@ pub struct Section {
     /// Child `Element`
     pub element: ElementKey,
     /// Allocated space
-    pub size: Size,
+    pub size: Values,
 }
 
 fn rotate_point(point: Point, pivot: Point, angle: f32) -> Point {
@@ -1380,4 +1281,15 @@ impl Point {
     pub fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
+}
+
+pub fn load_texture_from_memory(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    data: &[u8],
+) -> texture::Texture {
+    let img = image::load_from_memory(data).unwrap();
+    let img = img.to_rgba8();
+    let img = DynamicImage::ImageRgba8(img);
+    texture::Texture::from_image(device, queue, &img, None)
 }
