@@ -149,6 +149,42 @@ where
         self.events.queue.push(event);
     }
 
+    pub fn select_element(&mut self, key: ElementKey, msg: Msg) {
+        match self.select.selected {
+            Some(selected) => {
+                if selected == key {
+                    return;
+                }
+                let listeners = if let Some(element) = self.get_element(selected) {
+                    match element.events.get(&EventTypes::Select) {
+                        Some(m) => m.clone(),
+                        None => return,
+                    }
+                } else {
+                    return;
+                };
+                for EventListener { msg, .. } in listeners {
+                    self.events.events.push(events::Event {
+                        event_type: EventTypes::Select,
+                        window_event: WindowEvent::SelectNext,
+                        element_event: ElementEvent::Unselect,
+                        msg: msg.clone(),
+                        key: selected,
+                    });
+                }
+            }
+            None => (),
+        }
+        self.select.selected = Some(key);
+        self.events.events.push(events::Event {
+            event_type: EventTypes::Select,
+            window_event: WindowEvent::SelectNext,
+            element_event: ElementEvent::Select,
+            msg,
+            key,
+        });
+    }
+
     fn fix_hovers(&mut self, event: &events::WindowEvent) {
         let this_hover = self.find_hovered_element();
         if self.input.hover != this_hover {
@@ -741,7 +777,10 @@ where
                     if remaining_height <= 0.0 {
                         break;
                     }
-                    let space = spacing.calc(&container, &view_port);
+                    let space = match spacing {
+                        Some(spacing) => spacing.calc(&container, &view_port),
+                        None => remaining_height / len,
+                    };
                     let position = if transform.rotation == 0.0 {
                         Point::new(transform.position.x, y + space / 2.0)
                     } else {
@@ -776,7 +815,10 @@ where
                     if remaining_width <= 0.0 {
                         break;
                     }
-                    let space = spacing.calc(&container, &view_port);
+                    let space = match spacing {
+                        Some(spacing) => spacing.calc(&container, &view_port),
+                        None => remaining_width / len,
+                    };
                     let position = if transform.rotation == 0.0 {
                         Point::new(x + space / 2.0, transform.position.y)
                     } else {
@@ -1001,6 +1043,21 @@ where
     /// Configures children for `Element`
     pub fn with_children(mut self, children: Children) -> Self {
         self.children = children;
+        self
+    }
+
+    pub fn event_listen(mut self, event_type: EventTypes, msg: Msg) -> Self {
+        self.events.listen(event_type, msg);
+        self
+    }
+    
+    pub fn event_peek(mut self, event_type: EventTypes, msg: Msg) -> Self {
+        self.events.peek(event_type, msg);
+        self
+    }
+
+    pub fn event_force(mut self, event_type: EventTypes, msg: Msg) -> Self {
+        self.events.force(event_type, msg);
         self
     }
 
@@ -1235,12 +1292,12 @@ pub enum Children {
     /// Positions child `Elements` in rows on top of the parent
     Rows {
         children: Vec<Section>,
-        spacing: Values,
+        spacing: Option<Values>,
     },
     /// Positions child `Elements` in columns on top of the parent
     Columns {
         children: Vec<Section>,
-        spacing: Values,
+        spacing: Option<Values>,
     },
 
     /// Element has no children
@@ -1254,7 +1311,7 @@ pub struct Section {
     /// Child `Element`
     pub element: ElementKey,
     /// Allocated space
-    pub size: Values,
+    pub size: Option<Values>,
 }
 
 fn rotate_point(point: Point, pivot: Point, angle: f32) -> Point {

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use examples_common::Drawing;
-use rugui::{styles::{Color, Side, Size}, Children, Element, Gui, Section};
+use rugui::{styles::styles_proposition::{Colors, Value, Values}, Children, Element, Gui, Section};
 use winit::application::ApplicationHandler;
 
 extern crate examples_common;
@@ -25,6 +25,7 @@ pub enum App {
     App(Application),
 }
 
+
 pub struct Application {
     gui: Gui<()>,
     drawing: Drawing,
@@ -37,6 +38,7 @@ fn create_select(label: &str) -> Element<()> {
         .events
         .listen(rugui::events::EventTypes::Select, ());
     element.events.listen(rugui::events::EventTypes::Input, ());
+    element.events.listen(rugui::events::EventTypes::MouseDown, ());
     element.styles.selectable = true;
 
     element
@@ -63,59 +65,59 @@ impl ApplicationHandler for App {
         let rows = Element::new().with_label("rows");
         let mut row1 = create_select("row1");
         row1.text_str("Good job!");
-        *row1.styles.text_size_mut() = (Size::Percent(40.0), Side::Height);
+        row1.styles.text_size.set(Values::Value(Value::Pixel(40.0)));
         let mut row2 = Element::new().with_label("row2");
         row2.text_str("Try pressing Tab..");
-        row2.styles.text_mut().color = Color::WHITE;
-        *row2.styles.text_size_mut() = (Size::Percent(40.0), Side::Height);
+        row2.styles.text_color.set(Colors::WHITE);
+        row2.styles.text_size.set(Values::Value(Value::Pixel(40.0)));
         let mut row3 = create_select("row3");
         row3.text_str("Write something: ");
-        *row3.styles.text_size_mut() = (Size::Percent(40.0), Side::Height);
+        row3.styles.text_size.set(Values::Value(Value::Pixel(40.0)));
         let row4 = create_select("row4");
         let mut row5 = Element::new().with_label("row5");
         {
             let children = Vec::from([
                 Section {
                     element: gui.add_element(create_select("column1")),
-                    size: Size::None,
+                    size: None,
                 },
                 Section {
                     element: gui.add_element(create_select("column2")),
-                    size: Size::None,
+                    size: None,
                 },
                 Section {
                     element: gui.add_element(create_select("column3")),
-                    size: Size::None,
+                    size: None,
                 }
             ]);
-            row5.children = Children::Columns { children, spacing: Size::None }
+            row5.children = Children::Columns { children, spacing: None }
         }
 
         let children = Vec::from([
             Section {
-                size: Size::None,
+                size: None,
                 element: gui.add_element(row1),
             },
             Section {
-                size: Size::None,
+                size: None,
                 element: gui.add_element(row2),
             },
             Section {
-                size: Size::None,
+                size: None,
                 element: gui.add_element(row3),
             },
             Section {
-                size: Size::None,
+                size: None,
                 element: gui.add_element(row4),
             },
             Section {
-                size: Size::None,
+                size: None,
                 element: gui.add_element(row5),
             },
         ]);
         let key = gui.add_element(rows.with_children(rugui::Children::Rows {
             children,
-            spacing: Size::None,
+            spacing: None,
         }));
         gui.set_entry(Some(key));
 
@@ -145,13 +147,13 @@ impl ApplicationHandler for App {
             match event.element_event {
                 rugui::events::ElementEvent::Select => {
                     if let Some(element) = this.gui.get_element_mut(event.key) {
-                        *element.styles.bg_color_mut() = Color::RED;
+                        element.styles.bg_color.set(Colors::RED);
                     }
                     this.window.request_redraw();
                 }
                 rugui::events::ElementEvent::Unselect => {
                     if let Some(element) = this.gui.get_element_mut(event.key) {
-                        *element.styles.bg_color_mut() = Color::BLACK;
+                        element.styles.bg_color.set(Colors::BLACK);
                         element.text_str("")
                     }
                     this.window.request_redraw();
@@ -163,6 +165,10 @@ impl ApplicationHandler for App {
                         element.text_string(field);
                         this.window.request_redraw();
                     }
+                }
+                rugui::events::ElementEvent::MouseDown { .. } => {
+                    this.gui.select_element(event.key, ());
+                    this.window.request_redraw();
                 }
                 _ => {}
             }
