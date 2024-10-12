@@ -3,21 +3,17 @@ use std::sync::Arc;
 use crate::styles::Color;
 use crate::Point;
 use wgpu::{
-    include_wgsl, BindGroupLayoutDescriptor, BindGroupLayoutEntry, VertexAttribute,
+    include_wgsl, VertexAttribute,
     VertexBufferLayout,
 };
 
-use crate::{
-    styles::styles_proposition::{LinearGradient, RadialGradient},
-    texture::Texture,
-    ElementTransform,
-};
+use crate::texture::Texture;
 
 pub struct GpuBound {
     pub dimensions_buffer: wgpu::Buffer,
     pub dimensions_bind_group: wgpu::BindGroup,
     pub size: (u32, u32),
-    pub instances: wgpu::Buffer,
+    // pub instances: wgpu::Buffer,
     pub pipelines: Pipelines,
 }
 
@@ -305,12 +301,12 @@ impl GpuBound {
         let instancing_shaders =
             device.create_shader_module(include_wgsl!("shaders/instancing.wgsl"));
             
-        let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        /*let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Instance buffer layout"),
             size: std::mem::size_of::<RenderElementData>() as u64 * 500,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
-        });
+        });*/
 
         let instancing_pipeline =
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -355,7 +351,7 @@ impl GpuBound {
             dimensions_buffer,
             dimensions_bind_group,
             size,
-            instances: instance_buffer,
+            // instances: instance_buffer,
             pipelines: Pipelines {
                 color_pipeline,
                 texture_pipeline,
@@ -576,19 +572,6 @@ impl RenderRadialGradient {
             0,
             bytemuck::cast_slice(&[self.outer_color]),
         );
-    }
-
-    pub(crate) fn from_style(&mut self, style: &RadialGradient, transform: &ElementTransform) {
-        /*self.center = style.center.position.calc(container, view_port)
-        self.center_color = style.center.color;
-        self.radius = {
-            let p1 = self.center;
-            let p2 = style.radius.
-            let a = p2[0] - p1[0];
-            let b = p2[1] - p1[1];
-            f32::sqrt(a * a + b * b)
-        };
-        self.outer_color = style.radius.color;*/
     }
 }
 

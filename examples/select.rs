@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use examples_common::Drawing;
-use rugui::{styles::styles_proposition::{Colors, Value, Values}, Children, Element, Gui, Section};
+use rugui::{styles::{Colors, Value, Values}, Children, Element, Gui, Section};
 use winit::application::ApplicationHandler;
 
 extern crate examples_common;

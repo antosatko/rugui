@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use examples_common::Drawing;
 use rugui::{
-    styles::{Rotation, Round, Size, Color}, Children, Element, Gui
+    styles::{Colors, RValue, Rotation, Side, Value, Values}, Children, Element, Gui
 };
 use winit::application::ApplicationHandler;
 
@@ -51,21 +51,23 @@ impl ApplicationHandler for App {
 
         let mut element = Element::new().with_label("hello element");
         let styles = &mut element.styles;
-        styles.transfomr_mut().max_width = Size::Percent(50.0);
-        styles.transfomr_mut().max_height = Size::Percent(80.0);
-        styles.transfomr_mut().rotation = Rotation::Deg(25.0);
-        *styles.bg_color_mut() = Color::MAGENTA;
-
-        styles.text_size_mut().0 = Size::Pixel(50.0);
+        styles.max_width.set(Some(Values::Value(Value::Container(RValue::Half, Side::Width))));
+        styles.max_height.set(Some(Values::Value(Value::Container(RValue::Percent(80.0), Side::Height))));
+        styles.rotation.set(Rotation::Deg(25.0));
+        styles.bg_color.set(Colors::MAGENTA);
+        styles.text_size.set(Values::Value(Value::Pixel(50.0)));
         element.text_str("A rotated text looks pretty ugly, so maybe try to use it as little as possible.");
 
         let mut small_box = Element::new();
         small_box.text_str("This looks a lot better but still needs some improvements. I will look into that.👍");
-        small_box.styles.transfomr_mut().rotation = Rotation::AbsNone;
+        /*small_box.styles.transfomr_mut().rotation = Rotation::AbsNone;
         small_box.styles.transfomr_mut().margin = Size::Percent(40.0);
         small_box.styles.transfomr_mut().position_round = Round::Round;
         small_box.styles.transfomr_mut().scale_round = Round::Round;
-        *small_box.styles.bg_color_mut() = Color::YELLOW;
+        *small_box.styles.bg_color_mut() = Color::YELLOW;*/
+        small_box.styles.rotation.set(Rotation::AbsNone);
+        small_box.styles.margin.set(Values::Value(Value::Container(RValue::Percent(40.0), Side::Max)));
+        small_box.styles.bg_color.set(Colors::YELLOW);
 
         element.children = Children::Element(gui.add_element(small_box));
 

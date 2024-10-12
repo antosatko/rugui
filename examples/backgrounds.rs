@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use examples_common::Drawing;
 use rugui::{
-    styles::{styles_proposition::{ColorPoint, Colors, LinearGradient, Position, RadialGradient}, Color},
+    styles::{ColorPoint, Colors, LinearGradient, Position, RadialGradient},
     Element, Gui, Section,
 };
 use winit::application::ApplicationHandler;
@@ -59,9 +59,9 @@ impl ApplicationHandler for App {
         let mut rows = Element::new().with_label("rows");
         let row1 = Element::new().with_label("row1");
         let mut column1 = Element::new().with_label("row1 column1");
-        *column1.styles.bg_color_mut() = Colors::RED;
+        column1.styles.bg_color.set(Colors::GREEN);
         let mut column2 = Element::new().with_label("row1 column2");
-        column2.styles.set_bg_texture(Some(texture.clone()));
+        column2.styles.bg_texture.set(Some(texture.clone()));
         let row1 = row1.with_children(rugui::Children::Columns {
             children: vec![
                 Section {
@@ -78,25 +78,25 @@ impl ApplicationHandler for App {
 
         let row2 = Element::new().with_label("row2");
         let mut column1 = Element::new().with_label("row2 column1");
-        column1.styles.set_bg_lin_gradient(Some(LinearGradient {
+        column1.styles.bg_linear_gradient.set(Some(LinearGradient {
             p1: ColorPoint {
-                position: Position::Left,
-                color: Colors::RED,
+                position: Position::CLEFT,
+                color: Colors::CYAN,
             },
             p2: ColorPoint {
-                position: Position::Right,
+                position: Position::CRIGHT,
                 color: Colors::GREEN,
             },
         }));
         let mut column2 = Element::new().with_label("row2 column2");
-        column2.styles.set_bg_rad_gradient(Some(RadialGradient {
+        column2.styles.bg_radial_gradient.set(Some(RadialGradient {
             center: ColorPoint {
                 position: Position::default(),
-                color: Colors::RED,
-            },
-            radius: ColorPoint {
-                position: Position::Top,
                 color: Colors::GREEN,
+            },
+            outer: ColorPoint {
+                position: Position::CTOP,
+                color: Colors::TRANSPARENT,
             },
         }));
         let row2 = row2.with_children(rugui::Children::Columns {
@@ -130,10 +130,7 @@ impl ApplicationHandler for App {
         let entry = gui.add_element(rows);
         gui.set_entry(Some(entry));
 
-        *self = App::App(Application {
-            gui,
-            drawing,
-        });
+        *self = App::App(Application { gui, drawing });
     }
 
     fn window_event(

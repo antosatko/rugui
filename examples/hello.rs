@@ -2,9 +2,8 @@ use std::sync::Arc;
 
 use examples_common::Drawing;
 use rugui::{
-    load_texture_from_memory,
-    styles::styles_proposition::{
-        ColorPoint, Colors, LinearGradient, Position, PositionValues, RValue, RadialGradient, Side,
+    styles::{
+        ColorPoint, Colors, Position, RValue, RadialGradient, Side,
         Value, Values,
     },
     Element, ElementKey, Gui,
@@ -52,9 +51,6 @@ impl ApplicationHandler for App {
 
         let drawing = pollster::block_on(Drawing::new(window.clone()));
         window.set_visible(true);
-
-        let texture =
-            load_texture_from_memory(&drawing.device, &drawing.queue, include_bytes!("they.webp"));
 
         let size = window.inner_size();
         let mut gui = Gui::new(size.into(), &drawing.device, &drawing.queue);

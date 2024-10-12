@@ -3,7 +3,7 @@
 //! ## Feature flags
 #![doc = document_features::document_features!(feature_label = r#"<span class="stab portability"><code>{feature}</code></span>"#)]
 
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 #[cfg(feature = "clipboard")]
 use clipboard::{ClipboardContext, ClipboardProvider};
@@ -11,7 +11,7 @@ use events::{ElementEvent, EventPoll, EventTypes, WindowEvent};
 use cosmic_text::{Attrs, FontSystem, Metrics, SwashCache};
 use image::{DynamicImage, GenericImage};
 use render::{GpuBound, LinearGradientData, RadialGradientData, RenderElement, RenderElementData, RenderLinearGradient, RenderRadialGradient};
-use styles::styles_proposition::{Container, Side, Styles, Values, ViewPort};
+use styles::{Values, ViewPort};
 
 pub mod events;
 mod render;
@@ -492,35 +492,6 @@ where
         }
     }
 
-    fn traverse_elements_mut(&mut self, key: ElementKey, f: &mut dyn FnMut(&mut Element<Msg>)) {
-        let element = match self.elements.get_mut(&key) {
-            Some(element) => element,
-            None => return,
-        };
-        f(element);
-        match element.children.to_owned() {
-            Children::Element(child) => {
-                self.traverse_elements_mut(child, f);
-            }
-            Children::Layers(children) => {
-                for child in children {
-                    self.traverse_elements_mut(child, f);
-                }
-            }
-            Children::Rows { children, .. } => {
-                for child in children {
-                    self.traverse_elements_mut(child.element, f);
-                }
-            }
-            Children::Columns { children, .. } => {
-                for child in children {
-                    self.traverse_elements_mut(child.element, f);
-                }
-            }
-            Children::None => return,
-        }
-    }
-
     pub fn resize(&mut self, size: (u32, u32), queue: &wgpu::Queue) {
         self.resolve_events();
         self.size = size;
@@ -664,9 +635,10 @@ where
                 .rotation
                 .get()
                 .calc(&container, &view_port);
+            let margin = element.styles.margin.get().calc(&container, &view_port);
             let transform = ElementTransform {
                 position: pos,
-                scale: Point::new(width, height),
+                scale: Point::new((width-margin).max(0.0), (height-margin).max(0.0)),
                 rotation,
             };
 
@@ -947,10 +919,6 @@ impl ElementTransform {
             && point_rotated.y >= y
             && point_rotated.y <= y_max
     }
-
-    pub fn calc_side(&self, (size, side): &(Values, Side), view_port: &(u32, u32)) -> f32 {
-        todo!()
-    }
 }
 
 /// Most basic building block of the Rugui library
@@ -962,7 +930,7 @@ where
     text: Option<(String, bool)>,
     pub label: Option<String>,
     pub render_element: (Option<RenderElement>, RenderElementData),
-    pub styles: styles::styles_proposition::Styles,
+    pub styles: styles::Styles,
     pub events: EventListeners<Msg>,
     pub children: Children,
     text_buffer: Option<cosmic_text::Buffer>,
@@ -1070,7 +1038,7 @@ where
             text: None,
             label: None,
             render_element: (None, RenderElementData::default()),
-            styles: styles::styles_proposition::Styles::default(),
+            styles: styles::Styles::default(),
             events: EventListeners::new(),
             children: Children::None,
             text_buffer: None,
@@ -1086,7 +1054,7 @@ where
     }
 
     /// Configures styles for `Element`
-    pub fn with_styles(mut self, styles: styles::styles_proposition::Styles) -> Self {
+    pub fn with_styles(mut self, styles: styles::Styles) -> Self {
         self.styles = styles;
         self
     }
@@ -1216,7 +1184,7 @@ where
         }
         match &mut self.text {
             Some((txt, dirty)) => {
-                if *dirty {
+                if *dirty && transform.scale.x > 0.0 && transform.scale.y > 0.0 {
                     match &mut self.text_buffer {
                         Some(tb) => {
                             let mut tb = tb.borrow_with(font_system);
