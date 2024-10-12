@@ -10,7 +10,7 @@ use clipboard::{ClipboardContext, ClipboardProvider};
 use events::{ElementEvent, EventPoll, EventTypes, WindowEvent};
 use cosmic_text::{Attrs, FontSystem, Metrics, SwashCache};
 use image::{DynamicImage, GenericImage};
-use render::{GpuBound, RenderElement, RenderElementData, RenderLinearGradient, RenderRadialGradient};
+use render::{GpuBound, LinearGradientData, RadialGradientData, RenderElement, RenderElementData, RenderLinearGradient, RenderRadialGradient};
 use styles::styles_proposition::{Container, Side, Styles, Values, ViewPort};
 
 pub mod events;
@@ -643,10 +643,6 @@ where
             Some(element) => element,
             None => return,
         };
-        let element = match self.elements.get_mut(&key) {
-            Some(element) => element,
-            None => return,
-        };
         if true {
             let (width, height) = (
                 element
@@ -673,19 +669,10 @@ where
                 scale: Point::new(width, height),
                 rotation,
             };
-            let edges_radius = element.styles.edges_radius.get().calc(&container, &view_port);
-            element.render_element.1.edges[0] = edges_radius;
-            let edges_smooth = element.styles.edges_smooth.get().calc(&container, &view_port);
-            element.render_element.1.edges[1] = edges_smooth;
 
-            let font_size = element.styles.text_size.get().calc(&container, &view_port);
-            element.render_element.1.text_size = font_size;
             let pre_collision = element.transform.point_collision(self.input.mouse);
-
             element.transform = transform;
-            /*element.styles.flags.dirty_transform = true;
-            element.styles.flags.dirty_edges = true;
-            element.styles.flags.recalc_transform = false;*/
+            
 
             let post_collision = element.transform.point_collision(self.input.mouse);
             match (pre_collision, post_collision) {
@@ -732,6 +719,70 @@ where
                     }
                 }
                 _ => {}
+            }
+            let container = element.transform.clone().into();
+
+
+            let edges_radius = element.styles.edges_radius.get().calc(&container, &view_port);
+            element.render_element.1.edges[0] = edges_radius;
+            let edges_smooth = element.styles.edges_smooth.get().calc(&container, &view_port);
+            element.render_element.1.edges[1] = edges_smooth;
+
+            let font_size = element.styles.text_size.get().calc(&container, &view_port);
+            element.render_element.1.text_size = font_size;
+
+
+            match element.styles.bg_linear_gradient.get() {
+                Some(grad) => {
+                    let calc = grad.calc(&container, &view_port);
+                    let data = &mut element.render_element.1.lin_grad;
+                    match data {
+                        Some(lin) => {
+                            lin.start = calc.0.0.into();
+                            lin.end = calc.1.0.into();
+                            lin.start_color = calc.0.1.to_rgba().into();
+                            lin.end_color = calc.1.1.to_rgba().into();
+                        }
+                        None => {
+                            let lin = LinearGradientData {
+                                start: calc.0.0.into(),
+                                end: calc.1.0.into(),
+                                start_color: calc.0.1.to_rgba().into(),
+                                end_color: calc.1.1.to_rgba().into(),
+                            };
+                            element.render_element.1.lin_grad = Some(lin);
+                        }
+                    }
+                }
+                None => {
+                    
+                }
+            }
+            match element.styles.bg_radial_gradient.get() {
+                Some(grad) => {
+                    let calc = grad.calc(&container, &view_port);
+                    let data = &mut element.render_element.1.rad_grad;
+                    match data {
+                        Some(rad) => {
+                            rad.center = calc.0.0.into();
+                            rad.outer = calc.1.0.into();
+                            rad.center_color = calc.0.1.to_rgba().into();
+                            rad.outer_color = calc.1.1.to_rgba().into();
+                        }
+                        None => {
+                            let rad = RadialGradientData {
+                                center: calc.0.0.into(),
+                                outer: calc.1.0.into(),
+                                center_color: calc.0.1.to_rgba().into(),
+                                outer_color: calc.1.1.to_rgba().into(),
+                            };
+                            element.render_element.1.rad_grad = Some(rad);
+                        }
+                    }
+                }
+                None => {
+                    
+                }
             }
         }
         let transform = &element.transform;
@@ -848,8 +899,8 @@ where
     pub fn render<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) {
         pass.set_bind_group(0, &self.gpu.dimensions_bind_group, &[]);
 
-        for e in self.ordered.iter().cloned() {
-            if let Some(e) = self.get_element(e) {
+        for e in self.ordered.iter() {
+            if let Some(e) = self.get_element(*e) {
                 if let Some(re) = &e.render_element.0 {
                     re.render(&self.gpu.pipelines, pass)
                 }
@@ -859,7 +910,7 @@ where
 }
 
 #[derive(Clone, Debug, Default)]
-/// Transformation of a element
+/// Transformation of an element
 ///
 /// Element transformations are applied to the element and its children
 /// when the element is rendered for the first time or when the element
@@ -1073,12 +1124,12 @@ where
         }
         let mut render_element = self.render_element.0.take().unwrap();
         self.render_element.1.color = self.styles.bg_color.get().to_rgba().into();
-        if self.styles.texture.dirty {
-            if let Some(texture) = &self.styles.texture.get() {
+        if self.styles.bg_texture.dirty {
+            if let Some(texture) = &self.styles.bg_texture.get() {
                 render_element.set_texture(texture.clone());
             }
 
-            self.styles.texture.dirty = false;
+            self.styles.bg_texture.dirty = false;
         }
         if self.styles.bg_color.dirty {
             let color = self.styles.bg_color.get().to_rgba().into();
@@ -1121,40 +1172,48 @@ where
             }
             //self.styles.flags.dirty_transform = false;
         //}
-        /*if self.styles.flags.dirty_lin_gradient {
-            if let Some(grad) = &self.styles.background.lin_gradient {
-                match &mut render_element.linear_gradient {
-                    Some(lin) => {
-                        lin.from_style(grad, &self.transform);
-                        lin.write_all(queue);
-                    }
-                    _ => {
-                        let mut lin = RenderLinearGradient::zeroed(device);
-                        lin.from_style(grad, &self.transform);
-                        lin.write_all(queue);
-                        render_element.linear_gradient = Some(lin);
-                    }
+        if let Some(grad) = self.render_element.1.lin_grad {
+            match &mut render_element.linear_gradient {
+                Some(lin) => {
+                    lin.start = grad.start;
+                    lin.end = grad.end;
+                    lin.start_color = grad.start_color;
+                    lin.end_color = grad.end_color;
+                    lin.write_all(queue);
+                }
+                _ => {
+                    let mut lin = RenderLinearGradient::zeroed(device);
+                    lin.start = grad.start;
+                    lin.end = grad.end;
+                    lin.start_color = grad.start_color;
+                    lin.end_color = grad.end_color;
+                    lin.write_all(queue);
+                    render_element.linear_gradient = Some(lin);
                 }
             }
-            self.styles.flags.dirty_lin_gradient = false;
-        }*/
-        /*if self.styles.flags.dirty_rad_gradient {
-            if let Some(grad) = &self.styles.background.rad_gradient {
-                match &mut render_element.radial_gradient {
-                    Some(rad) => {
-                        rad.from_style(grad, &self.transform);
-                        rad.write_all(queue);
-                    }
-                    _ => {
-                        let mut rad = RenderRadialGradient::zeroed(device);
-                        rad.from_style(grad, &self.transform);
-                        rad.write_all(queue);
-                        render_element.radial_gradient = Some(rad);
-                    }
+        }
+        self.styles.bg_linear_gradient.dirty = false;
+        
+        if let Some(grad) = self.render_element.1.rad_grad {
+            match &mut render_element.radial_gradient {
+                Some(rad) => {
+                    rad.center = grad.center;
+                    rad.outer = grad.outer;
+                    rad.center_color = grad.center_color;
+                    rad.outer_color = grad.outer_color;
+                    rad.write_all(queue);
+                }
+                _ => {
+                    let mut rad = RenderRadialGradient::zeroed(device);
+                    rad.center = grad.center;
+                    rad.outer = grad.outer;
+                    rad.center_color = grad.center_color;
+                    rad.outer_color = grad.outer_color;
+                    rad.write_all(queue);
+                    render_element.radial_gradient = Some(rad);
                 }
             }
-            self.styles.flags.dirty_rad_gradient = false;
-        }*/
+        }
         match &mut self.text {
             Some((txt, dirty)) => {
                 if *dirty {
@@ -1186,7 +1245,7 @@ where
                             });
                             self.text_buffer = Some(tb.clone());
                             let tex = texture::Texture::from_image(device, queue, &image, None);
-                            render_element.text = Some(Arc::new(tex))
+                            render_element.text = Some(tex)
                         }
                         None => {
                             let mut tb = cosmic_text::Buffer::new(
@@ -1219,7 +1278,7 @@ where
                             });
                             self.text_buffer = Some(tb.clone());
                             let tex = texture::Texture::from_image(device, queue, &image, None);
-                            render_element.text = Some(Arc::new(tex))
+                            render_element.text = Some(tex)
                         }
                     }
                     *dirty = false;
@@ -1331,6 +1390,44 @@ fn rotate_point(point: Point, pivot: Point, angle: f32) -> Point {
 pub struct Point {
     pub x: f32,
     pub y: f32,
+}
+
+impl Point {
+    pub fn distance(&self, other: Point) -> f32 {
+        let x = self.x - other.x;
+        let y = self.y - other.y;
+        (x * x + y * y).sqrt()
+    }
+}
+
+impl From<[f32; 2]> for Point {
+    fn from(point: [f32; 2]) -> Self {
+        Self {
+            x: point[0],
+            y: point[1],
+        }
+    }
+}
+
+impl From<(f32, f32)> for Point {
+    fn from(point: (f32, f32)) -> Self {
+        Self {
+            x: point.0,
+            y: point.1,
+        }
+    }
+}
+
+impl From<Point> for [f32; 2] {
+    fn from(point: Point) -> [f32; 2] {
+        [point.x, point.y]
+    }
+}
+
+impl From<Point> for (f32, f32) {
+    fn from(point: Point) -> (f32, f32) {
+        (point.x, point.y)
+    }
 }
 
 impl Point {

@@ -765,7 +765,7 @@ impl From<Color> for [f32; 4] {
 }
 
 pub mod styles_proposition {
-    use std::sync::Arc;
+    use std::{default, sync::Arc};
 
     use crate::{rotate_point, texture::Texture, ElementTransform, Point};
 
@@ -786,15 +786,21 @@ pub mod styles_proposition {
     pub struct Styles {
         pub position: StyleComponent<Position>,
         pub width: StyleComponent<Values>,
+        pub max_width: StyleComponent<Option<Values>>,
+        pub min_width: StyleComponent<Option<Values>>,
         pub height: StyleComponent<Values>,
+        pub max_height: StyleComponent<Option<Values>>,
+        pub min_height: StyleComponent<Option<Values>>,
         pub rotation: StyleComponent<Rotation>,
         pub bg_color: StyleComponent<Colors>,
+        pub bg_texture: StyleComponent<Option<Arc<Texture>>>,
+        pub bg_linear_gradient: StyleComponent<Option<LinearGradient>>,
+        pub bg_radial_gradient: StyleComponent<Option<RadialGradient>>,
         pub margin: StyleComponent<Values>,
         pub padding: StyleComponent<Values>,
         pub alpha: StyleComponent<f32>,
         pub text_color: StyleComponent<Colors>,
         pub text_size: StyleComponent<Values>,
-        pub texture: StyleComponent<Option<Arc<Texture>>>,
         pub edges_radius: StyleComponent<Values>,
         pub edges_smooth: StyleComponent<Values>,
         pub visible: bool,
@@ -810,17 +816,23 @@ pub mod styles_proposition {
                     RValue::Full,
                     Side::Width,
                 ))),
+                max_width: StyleComponent::new(None),
+                min_width: StyleComponent::new(None),
                 height: StyleComponent::new(Values::Value(Value::Container(
                     RValue::Full,
                     Side::Height,
                 ))),
+                max_height: StyleComponent::new(None),
+                min_height: StyleComponent::new(None),
                 rotation: StyleComponent::new(Rotation::None),
                 bg_color: StyleComponent::new(Colors::Rgba(0.0, 0.0, 0.0, 0.0)),
                 margin: StyleComponent::new(Values::Value(Value::Zero)),
                 padding: StyleComponent::new(Values::Value(Value::Zero)),
                 text_color: StyleComponent::new(Colors::BLACK),
                 text_size: StyleComponent::new(Values::Value(Value::Pixel(50.0))),
-                texture: StyleComponent::new(None),
+                bg_texture: StyleComponent::new(None),
+                bg_linear_gradient: StyleComponent::new(None),
+                bg_radial_gradient: StyleComponent::new(None),
                 edges_radius: StyleComponent::new(Values::Value(Value::Zero)),
                 edges_smooth: StyleComponent::new(Values::Value(Value::Zero)),
                 alpha: StyleComponent::new(1.0),
@@ -831,39 +843,124 @@ pub mod styles_proposition {
         }
     }
 
+    #[derive(Debug, Clone)]
     pub struct Position {
-        parent: Parent,
-        value: PositionValues,
-        offset: (Option<Values>, Option<Values>),
+        pub parent: Parent,
+        pub value: PositionValues,
+        pub offset: (Option<Values>, Option<Values>),
     }
 
     impl Position {
-        pub fn new_c() -> StyleComponent<Self> {
+        pub (crate) fn new_c() -> StyleComponent<Self> {
             StyleComponent::new(Self {
                 parent: Parent::Container,
                 value: PositionValues::Center,
                 offset: (None, None),
             })
         }
+
+        pub const CTOP: Self = Self {
+            value: PositionValues::Top,
+            parent: Parent::Container,
+            offset: (None, None),
+        };
+        pub const CCENTER: Self = Self {
+            value: PositionValues::Center,
+            parent: Parent::Container,
+            offset: (None, None),
+        };
+        pub const CBOTTOM: Self = Self {
+            value: PositionValues::Bottom,
+            parent: Parent::Container,
+            offset: (None, None),
+        };
+        pub const CLEFT: Self = Self {
+            value: PositionValues::Left,
+            parent: Parent::Container,
+            offset: (None, None),
+        };
+        pub const CRIGHT: Self = Self {
+            value: PositionValues::Right,
+            parent: Parent::Container,
+            offset: (None, None),
+        };
+        pub const VPCENTER: Self = Self {
+            value: PositionValues::Center,
+            parent: Parent::ViewPort,
+            offset: (None, None),
+        };
+        pub const VPTOP: Self = Self {
+            value: PositionValues::Top,
+            parent: Parent::ViewPort,
+            offset: (None, None),
+        };
+        pub const VPBOTTOM: Self = Self {
+            value: PositionValues::Bottom,
+            parent: Parent::ViewPort,
+            offset: (None, None),
+        };
+        pub const VPLEFT: Self = Self {
+            value: PositionValues::Left,
+            parent: Parent::ViewPort,
+            offset: (None, None),
+        };
+        pub const VPRIGHT: Self = Self {
+            value: PositionValues::Right,
+            parent: Parent::ViewPort,
+            offset: (None, None),
+        };
+        pub fn with_parent(mut self, parent: Parent) -> Self {
+            self.parent = parent;
+            self
+        }
+        pub fn with_value(mut self, value: PositionValues) -> Self {
+            self.value = value;
+            self
+        }
+        pub fn with_offset(mut self, offset: (Option<Values>, Option<Values>)) -> Self {
+            self.offset = offset;
+            self
+        }
+        pub fn with_offset_x(mut self, offset_x: Option<Values>) -> Self {
+            self.offset.0 = offset_x;
+            self
+        }
+        pub fn with_offset_y(mut self, offset_y: Option<Values>) -> Self {
+            self.offset.1 = offset_y;
+            self
+        }
     }
 
+    impl Default for Position {
+        fn default() -> Self {
+            Self {
+                parent: Parent::Container,
+                value: PositionValues::Center,
+                offset: (None, None),
+            }
+        }
+    }
+
+    #[derive(Debug, Clone)]
     pub enum PositionValues {
         Top,
         TopLeft,
         TopRight,
         Center,
-        CenterLeft,
-        CenterRight,
+        Left,
+        Right,
         Bottom,
         BottomLeft,
         BottomRight,
     }
 
+    #[derive(Debug, Clone)]
     pub enum Parent {
         ViewPort,
         Container,
     }
 
+    #[derive(Debug, Clone, Copy)]
     pub enum Colors {
         Rgb(f32, f32, f32),
         Rgba(f32, f32, f32, f32),
@@ -1081,10 +1178,10 @@ pub mod styles_proposition {
     }
 
     impl Position {
-        pub fn calc(&self, container: &Container, view_port: &ViewPort) -> Point {
+        pub fn calc(&self, container: &Container, view_port: &ViewPort) -> Point { 
             let cont = match self.parent {
-                Parent::Container => *container,
-                Parent::ViewPort => Container {
+                Parent::Container => container,
+                Parent::ViewPort => &Container {
                     image: None,
                     position: Point::new(view_port.0 / 2.0, view_port.1 / 2.0),
                     rotation: 0.0,
@@ -1109,21 +1206,21 @@ pub mod styles_proposition {
                         cont.position.x + $left + offset_x,
                         cont.position.y + $right + offset_y,
                     );
-                    let point = rotate_point(point, cont.position, -cont.rotation);
-                    point
+                    rotate_point(point, cont.position, -cont.rotation)
                 }};
             }
-            match &self.value {
-                PositionValues::Top => corner!(-cont.position.x, -cont.position.y),
-                PositionValues::TopLeft => corner!(0.0, -cont.position.y),
-                PositionValues::TopRight => corner!(cont.position.x, -cont.position.y),
+            let result = match &self.value {
+                PositionValues::Top => corner!(0.0, -cont.size.y * 0.5),          // Centered horizontally, top vertically
+                PositionValues::TopLeft => corner!(-cont.size.x * 0.5, -cont.size.y * 0.5),
+                PositionValues::TopRight => corner!(cont.size.x * 0.5, -cont.size.y * 0.5),
                 PositionValues::Center => corner!(0.0, 0.0),
-                PositionValues::CenterLeft => corner!(-cont.position.x, 0.0),
-                PositionValues::CenterRight => corner!(cont.position.x, 0.0),
-                PositionValues::Bottom => corner!(-cont.position.x, cont.position.y),
-                PositionValues::BottomLeft => corner!(0.0, cont.position.y),
-                PositionValues::BottomRight => corner!(cont.position.x, cont.position.y),
-            }
+                PositionValues::Left => corner!(-cont.size.x * 0.5, 0.0),
+                PositionValues::Right => corner!(cont.size.x * 0.5, 0.0),
+                PositionValues::Bottom => corner!(0.0, cont.size.y * 0.5),         // Centered horizontally, bottom vertically
+                PositionValues::BottomLeft => corner!(-cont.size.x * 0.5, cont.size.y * 0.5),
+                PositionValues::BottomRight => corner!(cont.size.x * 0.5, cont.size.y * 0.5),
+            };
+            result
         }
     }
 
@@ -1224,9 +1321,36 @@ pub mod styles_proposition {
         pub p2: ColorPoint,
     }
 
+    impl LinearGradient {
+        pub fn new(p1: ColorPoint, p2: ColorPoint) -> Self {
+            Self { p1, p2 }
+        }
+
+        pub(crate) fn calc(&self, container: &Container, view_port: &ViewPort) -> ((Point, Colors), (Point, Colors)) {
+            let p1 = self.p1.position.calc(container, view_port);
+            let p2 = self.p2.position.calc(container, view_port);
+            (
+                (p1, self.p1.color),
+                (p2, self.p2.color),
+            )
+        }
+    }
+
     pub struct RadialGradient {
         pub center: ColorPoint,
-        pub radius: ColorPoint,
+        pub outer: ColorPoint,
+    }
+
+    impl RadialGradient {
+        pub fn new(center: ColorPoint, outer: ColorPoint) -> Self {
+            Self { center, outer }
+        }
+
+        pub(crate) fn calc(&self, container: &Container, view_port: &ViewPort) -> ((Point, Colors), (Point, Colors)) {
+            let center = self.center.position.calc(container, view_port);
+            let outer = self.outer.position.calc(container, view_port);
+            ((center, self.center.color), (outer, self.outer.color))
+        }
     }
 
     pub struct ColorPoint {

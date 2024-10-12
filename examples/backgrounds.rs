@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use examples_common::Drawing;
 use rugui::{
-    styles::{ColorPoint, LinearGradient, Position, RadialGradient, Size, Color},
+    styles::{styles_proposition::{ColorPoint, Colors, LinearGradient, Position, RadialGradient}, Color},
     Element, Gui, Section,
 };
 use winit::application::ApplicationHandler;
@@ -59,21 +59,21 @@ impl ApplicationHandler for App {
         let mut rows = Element::new().with_label("rows");
         let row1 = Element::new().with_label("row1");
         let mut column1 = Element::new().with_label("row1 column1");
-        *column1.styles.bg_color_mut() = Color::RED;
+        *column1.styles.bg_color_mut() = Colors::RED;
         let mut column2 = Element::new().with_label("row1 column2");
         column2.styles.set_bg_texture(Some(texture.clone()));
         let row1 = row1.with_children(rugui::Children::Columns {
             children: vec![
                 Section {
                     element: gui.add_element(column1),
-                    size: Size::None,
+                    size: None,
                 },
                 Section {
                     element: gui.add_element(column2),
-                    size: Size::None,
+                    size: None,
                 },
             ],
-            spacing: Size::None,
+            spacing: None,
         });
 
         let row2 = Element::new().with_label("row2");
@@ -81,50 +81,50 @@ impl ApplicationHandler for App {
         column1.styles.set_bg_lin_gradient(Some(LinearGradient {
             p1: ColorPoint {
                 position: Position::Left,
-                color: Color::RED,
+                color: Colors::RED,
             },
             p2: ColorPoint {
                 position: Position::Right,
-                color: Color::GREEN,
+                color: Colors::GREEN,
             },
         }));
         let mut column2 = Element::new().with_label("row2 column2");
         column2.styles.set_bg_rad_gradient(Some(RadialGradient {
             center: ColorPoint {
-                position: Position::Center,
-                color: Color::RED,
+                position: Position::default(),
+                color: Colors::RED,
             },
             radius: ColorPoint {
                 position: Position::Top,
-                color: Color::GREEN,
+                color: Colors::GREEN,
             },
         }));
         let row2 = row2.with_children(rugui::Children::Columns {
             children: vec![
                 Section {
                     element: gui.add_element(column1),
-                    size: Size::None,
+                    size: None,
                 },
                 Section {
                     element: gui.add_element(column2),
-                    size: Size::None,
+                    size: None,
                 },
             ],
-            spacing: Size::None,
+            spacing: None,
         });
 
         rows.children = rugui::Children::Rows {
             children: vec![
                 Section {
                     element: gui.add_element(row1),
-                    size: Size::None,
+                    size: None,
                 },
                 Section {
                     element: gui.add_element(row2),
-                    size: Size::None,
+                    size: None,
                 },
             ],
-            spacing: Size::None,
+            spacing: None,
         };
 
         let entry = gui.add_element(rows);

@@ -1,7 +1,14 @@
 use std::sync::Arc;
 
 use examples_common::Drawing;
-use rugui::{load_texture_from_memory, styles::{styles_proposition::{Colors, RValue, Side, Value, Values}, Color}, Element, ElementKey, Gui};
+use rugui::{
+    load_texture_from_memory,
+    styles::styles_proposition::{
+        ColorPoint, Colors, LinearGradient, Position, PositionValues, RValue, RadialGradient, Side,
+        Value, Values,
+    },
+    Element, ElementKey, Gui,
+};
 use winit::{application::ApplicationHandler, window::Window};
 
 extern crate examples_common;
@@ -28,7 +35,7 @@ pub struct Application {
     drawing: Drawing,
     element: ElementKey,
     t: f32,
-    window: Arc<Window>
+    window: Arc<Window>,
 }
 
 impl ApplicationHandler for App {
@@ -43,23 +50,44 @@ impl ApplicationHandler for App {
                 .unwrap(),
         );
 
-        
         let drawing = pollster::block_on(Drawing::new(window.clone()));
         window.set_visible(true);
 
-        let texture = load_texture_from_memory(&drawing.device, &drawing.queue, include_bytes!("they.webp"));
-        
+        let texture =
+            load_texture_from_memory(&drawing.device, &drawing.queue, include_bytes!("they.webp"));
+
         let size = window.inner_size();
         let mut gui = Gui::new(size.into(), &drawing.device, &drawing.queue);
 
         let mut element = Element::new().with_label("hello element");
         let styles = &mut element.styles;
-        styles.bg_color.set(Colors::CYAN.with_alpha(0.5));
-        styles.width.set(Values::Value(Value::Container(RValue::Full, Side::Min)));
-        styles.height.set(Values::Value(Value::Container(RValue::Full, Side::Min)));
-        styles.edges_radius.set(Values::Value(Value::Pixel(10.0)));
-        styles.edges_smooth.set(Values::Value(Value::Pixel(1.0)));
-        styles.texture.set(Some(Arc::new(texture)));
+        //styles.bg_color.set(Colors::CYAN.with_alpha(0.5));
+        styles
+            .width
+            .set(Values::Value(Value::Container(RValue::Full, Side::Min)));
+        styles
+            .height
+            .set(Values::Value(Value::Container(RValue::Full, Side::Min)));
+        styles.edges_radius.set(Values::Value(Value::Container(RValue::Half, Side::Width)));
+        styles.edges_smooth.set(Values::Value(Value::Pixel(2.0)));
+        //styles.bg_texture.set(Some(Arc::new(texture)));
+        /*styles.bg_linear_gradient.set(Some(LinearGradient{
+            p1: ColorPoint { position: Position::default(), color: Colors::WHITE },
+            p2: ColorPoint { position: Position{
+                value: PositionValues::TopLeft,
+                ..Default::default()
+            }, color: Colors::BLACK },
+        }));*/
+        styles.bg_radial_gradient.set(Some(RadialGradient {
+            center: ColorPoint {
+                position: Position::CCENTER.with_offset_x(Some(Values::Value(Value::Pixel(0.0)))),
+                color: Colors::WHITE,
+            },
+            outer: ColorPoint {
+                position: Position::CLEFT,
+                color: Colors::BLUE,
+            },
+        }));
 
         element.text_str("Hello world!");
         let element_key = gui.add_element(element);

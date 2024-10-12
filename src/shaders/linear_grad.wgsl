@@ -52,6 +52,8 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0)vec4<f32> {
+    var start = start / screen_size * 2.0;
+    var end = end / screen_size * 2.0;
     var gradient_factor = dot(in.clip_position - start, end - start) / dot(end - start, end - start);
     var color = mix(start_color, end_color, clamp(gradient_factor, 0.0, 1.0));
     return vec4<f32>(color.rgb, color.a*alpha);

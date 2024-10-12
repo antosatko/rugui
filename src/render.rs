@@ -36,7 +36,7 @@ impl GpuBound {
             label: Some("Dimensions Bind Group Layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -380,12 +380,12 @@ impl GpuBound {
 pub struct RenderRadialGradient {
     pub center_color: Color,
     pub center: [f32; 2],
-    pub radius: f32,
+    pub outer: [f32; 2],
     pub outer_color: Color,
     pub bind_group: wgpu::BindGroup,
     pub center_color_buffer: wgpu::Buffer,
     pub center_buffer: wgpu::Buffer,
-    pub radius_buffer: wgpu::Buffer,
+    pub outer_buffer: wgpu::Buffer,
     pub outer_color_buffer: wgpu::Buffer,
 }
 
@@ -455,9 +455,9 @@ impl RenderRadialGradient {
             mapped_at_creation: false,
         });
 
-        let radius_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let outer_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Radius Buffer"),
-            size: std::mem::size_of::<[f32; 1]>() as u64,
+            size: std::mem::size_of::<[f32; 2]>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -494,7 +494,7 @@ impl RenderRadialGradient {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &radius_buffer,
+                        buffer: &outer_buffer,
                         offset: 0,
                         size: None,
                     }),
@@ -518,7 +518,7 @@ impl RenderRadialGradient {
                 a: 0.0,
             },
             center: [0.0, 0.0],
-            radius: 0.0,
+            outer: [0.0, 0.0],
             outer_color: Color {
                 r: 0.0,
                 g: 0.0,
@@ -528,7 +528,7 @@ impl RenderRadialGradient {
             bind_group,
             center_color_buffer,
             center_buffer,
-            radius_buffer,
+            outer_buffer,
             outer_color_buffer,
         }
     }
@@ -545,10 +545,10 @@ impl RenderRadialGradient {
         queue.write_buffer(&self.center_buffer, 0, bytemuck::cast_slice(&[center]));
     }
 
-    pub fn set_radius(&mut self, radius: f32, queue: &wgpu::Queue) {
-        self.radius = radius;
+    pub fn set_outer(&mut self, outer: [f32; 2], queue: &wgpu::Queue) {
+        self.outer = outer;
 
-        queue.write_buffer(&self.radius_buffer, 0, bytemuck::cast_slice(&[radius]));
+        queue.write_buffer(&self.outer_buffer, 0, bytemuck::cast_slice(&[outer]));
     }
 
     pub fn set_outer_color(&mut self, color: Color, queue: &wgpu::Queue) {
@@ -570,7 +570,7 @@ impl RenderRadialGradient {
 
         queue.write_buffer(&self.center_buffer, 0, bytemuck::cast_slice(&[self.center]));
 
-        queue.write_buffer(&self.radius_buffer, 0, bytemuck::cast_slice(&[self.radius]));
+        queue.write_buffer(&self.outer_buffer, 0, bytemuck::cast_slice(&[self.outer]));
         queue.write_buffer(
             &self.outer_color_buffer,
             0,
@@ -792,13 +792,6 @@ impl RenderLinearGradient {
 
         queue.write_buffer(&self.end_buffer, 0, bytemuck::cast_slice(&[self.end]));
     }
-
-    pub(crate) fn from_style(&mut self, style: &LinearGradient, transform: &ElementTransform) {
-        /*self.start = style.p1.position.normalized(transform.scale);
-        self.start_color = style.p1.color;
-        self.end = style.p2.position.normalized(transform.scale);
-        self.end_color = style.p2.color;*/
-    }
 }
 
 pub struct RenderElement {
@@ -812,7 +805,7 @@ pub struct RenderElement {
     pub texture: Option<Arc<Texture>>,
     pub radial_gradient: Option<RenderRadialGradient>,
     pub linear_gradient: Option<RenderLinearGradient>,
-    pub text: Option<Arc<Texture>>,
+    pub text: Option<Texture>,
 }
 
 pub struct RenderColor {
@@ -872,7 +865,7 @@ impl RenderColor {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct RenderElementData {
     pub center: [f32; 2],
     pub size: [f32; 2],
@@ -881,6 +874,26 @@ pub struct RenderElementData {
     pub alpha: f32,
     pub edges: [f32; 2],
     pub text_size: f32,
+    pub lin_grad: Option<LinearGradientData>,
+    pub rad_grad: Option<RadialGradientData>,
+}
+
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
+pub struct LinearGradientData {
+    pub start_color: Color,
+    pub end_color: Color,
+    pub start: [f32; 2],
+    pub end: [f32; 2],
+}
+
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
+pub struct RadialGradientData {
+    pub center_color: Color,
+    pub center: [f32; 2],
+    pub outer: [f32; 2],
+    pub outer_color: Color,
 }
 
 impl RenderElementData {
@@ -942,6 +955,8 @@ impl RenderElementData {
         alpha: f32,
         edges: [f32; 2],
         text_size: f32,
+        lin_grad: Option<LinearGradientData>,
+        rad_grad: Option<RadialGradientData>,
     ) -> Self {
         Self {
             center,
@@ -951,6 +966,8 @@ impl RenderElementData {
             alpha,
             edges,
             text_size,
+            lin_grad,
+            rad_grad,
         }
     }
 
@@ -967,6 +984,8 @@ impl RenderElementData {
         alpha: 0.0,
         edges: [0.0, 0.0],
         text_size: 20.0,
+        lin_grad: None,
+        rad_grad: None,
     };
 
     pub(crate) fn update_transform(&mut self, transform: &crate::ElementTransform) {
@@ -1164,10 +1183,6 @@ impl RenderElement {
 
     pub fn set_texture(&mut self, texture: Arc<Texture>) {
         self.texture = Some(texture);
-    }
-
-    pub fn set_text(&mut self, text: Arc<Texture>) {
-        self.text = Some(text);
     }
 
     pub fn update(&mut self, data: RenderElementData, queue: &wgpu::Queue) {
